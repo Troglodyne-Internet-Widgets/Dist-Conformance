@@ -11,7 +11,7 @@ use List::Util();
 
 use Dist::Conformance::Schema();
 
-=head1 SYNOPSIS
+=head1 IN A FLAVOR
 
     checks:
       CriticProfile:

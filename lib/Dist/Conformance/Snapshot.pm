@@ -108,7 +108,7 @@ sub blob_sha ($bytes) {
 
 Subclass this module, and implement L</paths> and L</content>.  Both can be
 lazy, and both can memoize, because a snapshot describes one moment of one
-repository.  L</has> and L</sha> call L</paths>.  If listing every path costs
+repository.  L</contains> and L</sha> call L</paths>.  If listing every path costs
 much more than looking at one, override them as well.
 
 =head1 SEE ALSO

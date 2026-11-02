@@ -10,7 +10,7 @@ use Mojo::Base 'Dist::Conformance::Check', -signatures;
 use Dist::Conformance::Schema();
 use Dist::Conformance::Snapshot();
 
-=head1 SYNOPSIS
+=head1 IN A FLAVOR
 
     checks:
       GitHooks:

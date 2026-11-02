@@ -9,7 +9,7 @@ use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
 use Dist::Conformance::Schema();
 
-=head1 SYNOPSIS
+=head1 IN A FLAVOR
 
     checks:
       ToolConfiguration:

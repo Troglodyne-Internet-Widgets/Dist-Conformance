@@ -11,7 +11,7 @@ use Cpanel::JSON::XS();
 
 use Dist::Conformance::Schema();
 
-=head1 SYNOPSIS
+=head1 IN A FLAVOR
 
     checks:
       ClaudeSettings:
