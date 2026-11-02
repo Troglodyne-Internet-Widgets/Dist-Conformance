@@ -12,6 +12,8 @@ use File::Find();
 use File::Slurper::Temp();
 use Mojo::File();
 
+use Dist::Conformance::Schema();
+
 =head1 SYNOPSIS
 
     use 5.040;
@@ -78,7 +80,7 @@ that leaves the root.
 =cut
 
 sub file ( $self, $path ) {
-    Carp::croak("$path is not a relative path inside the checkout") if $path eq q{} || $path =~ m{\A/|(?:\A|/)[.][.](?:/|\z)};
+    Dist::Conformance::Schema::relative_path( $path, 'the checkout' );
     return $self->root->child( split m{/}, $path );
 }
 

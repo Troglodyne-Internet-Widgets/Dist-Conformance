@@ -1,0 +1,165 @@
+package Dist::Conformance::Schema;
+
+# ABSTRACT: Parse YAML and JSON, and validate the result against a schema
+
+use 5.040;
+use warnings FATAL => 'all';
+use re '/aasx';
+
+use Carp  ();
+use Clone ();
+use Cpanel::JSON::XS();
+use JSON::Validator::Schema::Troglodyne();
+use YAML::XS();
+
+=head1 SYNOPSIS
+
+    use 5.040;
+    use Dist::Conformance::Schema;
+
+    my $data = Dist::Conformance::Schema::parse_yaml( "name: troglodyne\n", 'conformance/troglodyne.yml' );
+    $data = Dist::Conformance::Schema::validate(
+        $data,
+        { type => 'object', required => ['name'], properties => { name => $Dist::Conformance::Schema::NAME } },
+        'conformance/troglodyne.yml',
+    );
+
+=head1 DESCRIPTION
+
+Every file that Dist::Conformance reads is data that somebody wrote by hand: a
+flavor file, F<.conformance.yml>, the configuration of a check.  This module
+holds the two things that each of them needs: a parser whose error names the
+file, and a validator whose errors name the file and the key.
+
+The schemas are OpenAPI v3 schemas for L<JSON::Validator::Schema::Troglodyne>.
+That means C<nullable> instead of a type list, and no C<propertyNames>.  The
+validator fills in the C<default> of each key that the data leaves out, and
+coerces C<true>, C<false>, C<yes>, C<no>, C<1>, C<0> and the empty string to a
+boolean where the schema asks for one.
+
+=head1 SCHEMA FRAGMENTS
+
+These package variables are pieces that the schemas of this distribution share.
+A check module can use them in its own C<config_schema>.
+
+=over
+
+=item C<$NAME>
+
+A name of a flavor or a check: a letter or digit, then letters, digits, C<.>,
+C<_> or C<->.  A name never holds a C</>, so it can be a file name.
+
+=item C<$PATH>
+
+A relative path inside a repository or a standards source: not absolute, and
+with no C<..> component.
+
+=item C<$STATUS>
+
+C<pass>, C<info> or C<fail>.
+
+=back
+
+=cut
+
+our $NAME   = { type => 'string', pattern => '\A[A-Za-z0-9][A-Za-z0-9._-]*\z' };
+our $PATH   = { type => 'string', pattern => '\A(?!/)(?!(?:.*/)?[.][.](?:/|\z)).+\z' };
+our $STATUS = { type => 'string', enum    => [qw{pass info fail}] };
+
+=func parse_yaml
+
+C<($text, $where)>.  Returns the mapping that the YAML document C<$text> holds.
+Dies with a message that starts with C<$where> when the text does not parse, or
+when its top level is not a mapping.
+
+=cut
+
+sub parse_yaml ( $text, $where ) {
+    my $data = eval { YAML::XS::Load($text) };
+    Carp::croak( "$where does not parse as YAML: " . first_line($@) ) if !defined $data && $@;
+    Carp::croak("$where does not hold a mapping at its top level")    if ref $data ne 'HASH';
+    return $data;
+}
+
+=func parse_json
+
+C<($bytes, $where)>.  The same as L</parse_yaml>, for UTF-8 JSON text.
+
+=cut
+
+sub parse_json ( $bytes, $where ) {
+    my $data = eval { Cpanel::JSON::XS->new->utf8->decode($bytes) };
+    Carp::croak( "$where does not parse as JSON: " . first_line($@) ) if !defined $data && $@;
+    Carp::croak("$where does not hold an object at its top level")    if ref $data ne 'HASH';
+    return $data;
+}
+
+=func encode_json
+
+C<($data)>.  Returns C<$data> as UTF-8 JSON, indented by two spaces, with the
+keys sorted, and with a final newline, so that a file that this distribution
+writes gives a small diff the next time it changes.
+
+=cut
+
+sub encode_json ($data) {
+    return Cpanel::JSON::XS->new->utf8->pretty->space_before(0)->canonical->indent_length(2)->encode($data);
+}
+
+=func validate
+
+C<($data, $schema, $where)>.  Returns a copy of C<$data> with the defaults of
+C<$schema> filled in.  Dies when the data does not match: the message starts
+with C<$where is not valid:>, and then gives each error on a line of its own,
+as the JSON pointer of the key and what is wrong with it, such as
+C</checks/ClaudeMd/file: Expected string - got array.>  The caller's data is not
+changed.
+
+=cut
+
+sub validate ( $data, $schema, $where ) {
+    my $copy      = Clone::clone($data);
+    my $validator = JSON::Validator::Schema::Troglodyne->new;
+    $validator->coerce( { %{ $validator->coerce }, defaults => 1, booleans => 1 } );
+    my @errors = $validator->validate( $copy, $schema );
+    Carp::croak( join "\n", "$where is not valid:", map { "  $_" } @errors ) if @errors;
+    return $copy;
+}
+
+=func relative_path
+
+C<($path, $inside)>.  Returns C<$path> when it matches L</$PATH>.  Otherwise
+dies with C<$path is not a relative path inside $inside>.  Every read and write
+of a path that a flavor names goes through it.
+
+=cut
+
+sub relative_path ( $path, $inside ) {
+
+    # (?^:) gives the pattern the default flags that JSON::Validator matches it with, not the /s of this file.
+    Carp::croak( ( $path // 'undef' ) . " is not a relative path inside $inside" ) if ( $path // q{} ) !~ m/(?^:$PATH->{pattern})/;
+    return $path;
+}
+
+=func first_line
+
+C<($text)>.  The first line of an error, without the "at FILE line N" that
+perl adds, for a message that is about a file of the user and not about a line
+of this code.
+
+=cut
+
+sub first_line ($text) {
+    my ($line) = split /\n/, $text // q{};
+    $line //= q{};
+    $line =~ s/\ at\ \S+\ line\ \d+[.]?\z//;
+    return $line;
+}
+
+=head1 SEE ALSO
+
+L<Dist::Conformance>
+
+L<JSON::Validator::Schema::OpenAPIv3>
+
+=cut
