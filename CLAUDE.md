@@ -38,7 +38,6 @@ if you raise or lower the floor, change the profile as well as the `use` lines.
 | `.perlcriticrc` | the policies, which are the house style made enforceable |
 | `Changes` | what changed and when, per release |
 | `dist.ini` | the build, and what has to be installed to run it |
-
 | `perldoc Dist::Conformance::Check` | the interface of a check, and how to write one |
 | `perldoc Dist::Conformance::Flavor` | the flavor file, `extends` and the merge rule, and the layout of a standards repository |
 | `perldoc Dist::Conformance::Config` | `.conformance.yml`, which a repository uses to pick its flavor |

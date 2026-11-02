@@ -245,3 +245,7 @@ VPNs
 WAL
 whitespace
 YAML
+worktree
+worktrees
+gitdir
+commondir
