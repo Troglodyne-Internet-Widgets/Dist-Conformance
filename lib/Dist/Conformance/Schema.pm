@@ -118,12 +118,25 @@ changed.
 =cut
 
 sub validate ( $data, $schema, $where ) {
-    my $copy      = Clone::clone($data);
-    my $validator = JSON::Validator::Schema::Troglodyne->new;
-    $validator->coerce( { %{ $validator->coerce }, defaults => 1, booleans => 1 } );
-    my @errors = $validator->validate( $copy, $schema );
+    my $copy   = Clone::clone($data);
+    my @errors = errors( $copy, $schema );
     Carp::croak( join "\n", "$where is not valid:", map { "  $_" } @errors ) if @errors;
     return $copy;
+}
+
+=func errors
+
+C<($data, $schema)>.  The errors of C<$data> against C<$schema>, each as a
+string that starts with the JSON pointer of its key, or none.  Fills in the
+defaults of C<$schema> in C<$data>, and coerces its booleans, in place.
+
+=cut
+
+sub errors ( $data, $schema ) {
+    my $validator = JSON::Validator::Schema::Troglodyne->new;
+    $validator->coerce( { %{ $validator->coerce }, defaults => 1, booleans => 1 } );
+    my @errors = map { "$_" } $validator->validate( $data, $schema );
+    return @errors;
 }
 
 =func matches
