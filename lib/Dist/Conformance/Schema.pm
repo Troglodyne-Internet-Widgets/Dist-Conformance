@@ -126,6 +126,20 @@ sub validate ( $data, $schema, $where ) {
     return $copy;
 }
 
+=func matches
+
+C<($fragment, $value)>.  Whether C<$value> is defined and matches the
+C<pattern> of C<$fragment>, such as L</$NAME>, in the way that JSON::Validator
+matches it.
+
+=cut
+
+sub matches ( $fragment, $value ) {
+
+    # (?^:) gives the pattern the default flags that JSON::Validator matches it with, not the /s of this file.
+    return defined $value && $value =~ m/(?^:$fragment->{pattern})/;
+}
+
 =func relative_path
 
 C<($path, $inside)>.  Returns C<$path> when it matches L</$PATH>.  Otherwise
@@ -136,8 +150,7 @@ of a path that a flavor names goes through it.
 
 sub relative_path ( $path, $inside ) {
 
-    # (?^:) gives the pattern the default flags that JSON::Validator matches it with, not the /s of this file.
-    Carp::croak( ( $path // 'undef' ) . " is not a relative path inside $inside" ) if ( $path // q{} ) !~ m/(?^:$PATH->{pattern})/;
+    Carp::croak( ( $path // 'undef' ) . " is not a relative path inside $inside" ) if !matches( $PATH, $path );
     return $path;
 }
 

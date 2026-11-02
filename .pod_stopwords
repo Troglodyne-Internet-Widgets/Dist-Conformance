@@ -270,3 +270,8 @@ schemas
 OpenAPI
 UTF
 perl
+YAML
+yml
+CI
+lineage
+mergeable

@@ -49,6 +49,13 @@ subtest validate => sub {
     );
 };
 
+subtest matches => sub {
+    ok( Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME,  'troglodyne-5.040' ), 'a name matches' );
+    ok( !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, 'a/b' ),              'a path is not a name' );
+    ok( !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, "a\n" ),              'nor is a name with a newline after it' );
+    ok( !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, undef ),              'nor is undef' );
+};
+
 subtest relative_path => sub {
     is( Dist::Conformance::Schema::relative_path( $_, 'here' ), $_, "'$_' is a relative path" ) for qw{a a/b .a a/..b ...};
     for my $bad ( qw{/a .. ../a a/.. a/../b}, q{}, "a\nb" ) {
