@@ -130,9 +130,9 @@ The hooks are tracked, match their templates, and are installed.
 
 A distribution has the files that its build needs.
 
-=item L<Dist::Conformance::Check::PerlSlopConfig>
+=item L<Dist::Conformance::Check::DataSchema>
 
-F<.perl-slop.json> matches its schema.
+A JSON or YAML file, such as F<.perl-slop.json>, matches a schema.
 
 =item L<Dist::Conformance::Check::ClaudeSettings>
 
