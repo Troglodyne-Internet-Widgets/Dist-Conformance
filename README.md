@@ -168,6 +168,15 @@ Please see those modules/websites for more information related to this module.
 - [Dist::Conformance::Snapshot](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ASnapshot)
 - [Dist::Conformance::Source](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ASource)
 
+# BUGS
+
+Please report any bugs or feature requests on the bugtracker website
+[https://github.com/Troglodyne-Internet-Widgets/Dist-Conformance/issues](https://github.com/Troglodyne-Internet-Widgets/Dist-Conformance/issues)
+
+When submitting a bug or request, please include a test-file or a
+patch to an existing test-file that illustrates the bug or desired
+feature.
+
 # AUTHORS
 
 Current Maintainers:
