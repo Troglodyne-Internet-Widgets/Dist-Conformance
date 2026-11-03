@@ -31,6 +31,7 @@ checks:
       Changes: templates/Changes
       prereqs.yml: templates/prereqs.yml
   PerlSlopConfig:
+    module: DataSchema
     file: .perl-slop.json
     missing: info
     schema:
