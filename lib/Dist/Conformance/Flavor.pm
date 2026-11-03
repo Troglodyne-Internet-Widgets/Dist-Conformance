@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base -base, -signatures;
 
-use Carp ();
 use List::Util();
 
 use Dist::Conformance::Schema();
@@ -291,8 +290,8 @@ sub linearize ( $source, $name ) {
             next;
         }
         my @names = map { $_->{name} } @path;
-        Carp::croak( 'The flavors extend each other in a cycle: ' . join ' -> ', @names, $parent ) if List::Util::any { $_ eq $parent } @names;
-        next                                                                                       if $done{$parent};
+        die 'The flavors extend each other in a cycle: ', join( ' -> ', @names, $parent ), "\n" if List::Util::any { $_ eq $parent } @names;
+        next if $done{$parent};
         push @path, { name => $parent, data => read_file( $source, $parent, $frame->{name} ), next => 0 };
     }
     return @order;
@@ -342,15 +341,15 @@ it, for the message when it is missing.
 
 sub read_file ( $source, $name, $extended_by = undef ) {
     my $file = "conformance/$name.yml";
-    Carp::croak("$name is not the name of a flavor") if !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, $name );
+    die "$name is not the name of a flavor\n" if !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, $name );
     if ( !$source->exists_file($file) ) {
         my $by = defined $extended_by ? ", which conformance/$extended_by.yml extends" : q{};
-        Carp::croak( "There is no flavor $name$by: the standards at " . $source->describe . " have no $file" );
+        die( "There is no flavor $name$by: the standards at " . $source->describe . " have no $file\n" );
     }
     my $data = Dist::Conformance::Schema::validate( Dist::Conformance::Schema::parse_yaml( $source->file($file), $file ), \%SCHEMA, $file );
-    Carp::croak("$file is not valid:\n  /name: is $data->{name}, not $name, the name of the file") if $data->{name} ne $name;
+    die "$file is not valid:\n  /name: is $data->{name}, not $name, the name of the file\n" if $data->{name} ne $name;
     for my $check ( sort keys %{ $data->{checks} } ) {
-        Carp::croak("$file is not valid:\n  /checks/$check: is not the name of a check") if !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, $check );
+        die "$file is not valid:\n  /checks/$check: is not the name of a check\n" if !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, $check );
     }
     return $data;
 }

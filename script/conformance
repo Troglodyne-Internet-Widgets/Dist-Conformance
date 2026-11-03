@@ -119,7 +119,7 @@ sub main (@arguments) {
     );
     my ( $output, $status ) = eval { $command eq 'check' ? report_check( $conformance, \%options ) : report_update( $conformance, \%options ) };
     if ( !defined $output ) {
-        warn 'conformance: ' . Dist::Conformance::Schema::first_line($@) . "\n";
+        warn "conformance: $@";
         return 2;
     }
     print {*STDOUT} $output or return 2;

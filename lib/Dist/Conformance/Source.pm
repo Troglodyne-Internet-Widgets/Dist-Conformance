@@ -7,8 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base -base, -signatures;
 
-use Carp ();
-
 use Dist::Conformance::Schema();
 
 =head1 SYNOPSIS
@@ -60,7 +58,7 @@ implement it.
 
 =cut
 
-sub root ($self) { Carp::croak( ref($self) . ' does not implement root' ) }
+sub root ($self) { die( ref($self) . " does not implement root\n" ) }
 
 =method describe
 
@@ -69,7 +67,7 @@ A subclass must implement it.
 
 =cut
 
-sub describe ($self) { Carp::croak( ref($self) . ' does not implement describe' ) }
+sub describe ($self) { die( ref($self) . " does not implement describe\n" ) }
 
 =method base
 
@@ -93,7 +91,7 @@ component.
 sub file ( $self, $relative ) {
     Dist::Conformance::Schema::relative_path( $relative, 'the standards' );
     my $file = $self->base->child( split m{/}, $relative );
-    Carp::croak( "The standards at " . $self->describe . " have no $relative" ) if !-e $file || -d _;
+    die( "The standards at " . $self->describe . " have no $relative\n" ) if !-e $file || -d _;
     return $file->slurp;
 }
 

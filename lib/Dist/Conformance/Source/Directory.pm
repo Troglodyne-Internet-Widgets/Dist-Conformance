@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base 'Dist::Conformance::Source', -signatures;
 
-use Carp ();
 use Mojo::File();
 
 =head1 SYNOPSIS
@@ -40,7 +39,7 @@ Dies unless L</directory> is given.
 
 sub new ( $class, @args ) {
     my $self = $class->SUPER::new(@args);
-    Carp::croak('directory is required') if !defined $self->directory;
+    die "directory is required\n" if !defined $self->directory;
     return $self;
 }
 
@@ -52,7 +51,7 @@ L</directory>, as a L<Mojo::File>.  Dies when it is not a directory.
 
 sub root ($self) {
     my $root = Mojo::File->new( $self->directory );
-    Carp::croak("The standards directory $root does not exist") if !-d $root;
+    die "The standards directory $root does not exist\n" if !-d $root;
     return $root;
 }
 

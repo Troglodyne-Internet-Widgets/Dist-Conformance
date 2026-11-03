@@ -87,6 +87,7 @@ subtest 'errors' => sub {
     is( $none->{err},    "conformance: The repository has no .conformance.yml, so it names no flavor\n", 'and says why, without a line number' );
     my $bad = run_main( qw{check --root}, Fixture::checkout( '.conformance.yml' => "flavor: x\n" ) );
     like( $bad->{err}, qr/\Aconformance:\ [.]conformance[.]yml\ is\ not\ valid:/, 'an invalid file is named' );
+    like( $bad->{err}, qr/^\ \ \/source:\ /m,                                     'with each error under it' );
     is( run_main('nonsense')->{status},        2, 'an unknown command exits 2' );
     is( run_main(qw{check --bogus})->{status}, 2, 'and so does an unknown option' );
     is( run_main(qw{check extra})->{status},   2, 'and an extra argument' );

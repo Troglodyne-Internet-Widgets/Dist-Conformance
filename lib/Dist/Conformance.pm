@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base -base, -signatures;
 
-use Carp ();
 use List::Util();
 use Module::Runtime();
 use Mojo::File();
@@ -122,7 +121,7 @@ The L<Dist::Conformance::Flavor>, loaded from the source.
 
 has 'root';
 has snapshot => sub ($self) {
-    Carp::croak('Dist::Conformance needs a root or a snapshot') if !defined $self->root;
+    die "Dist::Conformance needs a root or a snapshot\n" if !defined $self->root;
     return Dist::Conformance::Snapshot::Directory->new( root => $self->root );
 };
 has config => sub ($self) { Dist::Conformance::Config::load( $self->snapshot ) };
@@ -173,7 +172,7 @@ sub skipped ($self) {
     );
     if (@wrong) {
         my $name = $flavor->name;
-        Carp::croak( join "\n", "$Dist::Conformance::Config::FILE is not valid:", map { "  $_: names a check that the flavor $name does not run" } @wrong );
+        die join( "\n", "$Dist::Conformance::Config::FILE is not valid:", map { "  $_: names a check that the flavor $name does not run" } @wrong ), "\n";
     }
     return { map { $_ => 1 } @{ $config->{skip} } };
 }
@@ -214,12 +213,12 @@ sub make_check ( $self, $name, $config, $variables ) {
     my $module = $config->{module} // $name;
     my $class  = index( $module, '::' ) >= 0 ? $module : "Dist::Conformance::Check::$module";
     if ( !Dist::Conformance::Schema::matches( $Dist::Conformance::Check::MODULE, $class ) ) {
-        Carp::croak("The flavor $flavor runs the check $name, but $class is not the name of a module");
+        die "The flavor $flavor runs the check $name, but $class is not the name of a module\n";
     }
     if ( !eval { Module::Runtime::require_module($class); 1 } ) {
-        Carp::croak( "The flavor $flavor runs the check $name, but its module $class does not load: " . Dist::Conformance::Schema::first_line($@) );
+        die( "The flavor $flavor runs the check $name, but its module $class does not load: " . Dist::Conformance::Schema::first_line($@), "\n" );
     }
-    Carp::croak("The flavor $flavor runs the check $name, but $class is not a Dist::Conformance::Check") if !$class->isa('Dist::Conformance::Check');
+    die "The flavor $flavor runs the check $name, but $class is not a Dist::Conformance::Check\n" if !$class->isa('Dist::Conformance::Check');
     my $repo = exists $self->config->{checks}{$name} ? " with $Dist::Conformance::Config::FILE" : q{};
     return $class->from_config(
         name      => $name,

@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base 'Dist::Conformance::Source', -signatures;
 
-use Carp ();
 use Digest::SHA();
 use IPC::Run3();
 use Mojo::File();
@@ -61,7 +60,7 @@ has 'url';
 has ref     => 'HEAD';
 has offline => 0;
 has cache   => sub {
-    my $base = $ENV{XDG_CACHE_HOME} || Mojo::File->new( $ENV{HOME} // Carp::croak('Neither XDG_CACHE_HOME nor HOME is set') )->child('.cache');
+    my $base = $ENV{XDG_CACHE_HOME} || Mojo::File->new( $ENV{HOME} // die("Neither XDG_CACHE_HOME nor HOME is set\n") )->child('.cache');
     return Mojo::File->new($base)->child('dist-conformance')->to_string;
 };
 
@@ -74,9 +73,9 @@ option.
 
 sub new ( $class, @args ) {
     my $self = $class->SUPER::new(@args);
-    Carp::croak('url is required')                            if !defined $self->url || $self->url eq q{};
-    Carp::croak( 'The url ' . $self->url . ' starts with -' ) if index( $self->url, q{-} ) == 0;
-    Carp::croak( 'The ref ' . $self->ref . ' starts with -' ) if index( $self->ref, q{-} ) == 0;
+    die "url is required\n"                             if !defined $self->url || $self->url eq q{};
+    die( 'The url ' . $self->url . " starts with -\n" ) if index( $self->url, q{-} ) == 0;
+    die( 'The ref ' . $self->ref . " starts with -\n" ) if index( $self->ref, q{-} ) == 0;
     return $self;
 }
 
@@ -100,7 +99,7 @@ sub root ($self) {
     return $self->{root} //= do {
         my $dir = $self->clone_dir;
         if ( $self->offline ) {
-            Carp::croak( 'Offline, and there is no cached copy of ' . $self->describe ) if !-d $dir->child('.git');
+            die( 'Offline, and there is no cached copy of ' . $self->describe, "\n" ) if !-d $dir->child('.git');
         }
         else {
             $self->fetch;
@@ -154,7 +153,7 @@ sub git (@arguments) {
     my ( $out, $err ) = ( q{}, q{} );
     IPC::Run3::run3( [ 'git', @arguments ], \undef, \$out, \$err );
     my $status = $?;
-    Carp::croak( "git @arguments failed: " . ( $err =~ s/\s+\z//r ) ) if $status;
+    die( "git @arguments failed: " . ( $err =~ s/\s+\z//r ), "\n" ) if $status;
     return $out;
 }
 

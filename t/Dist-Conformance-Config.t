@@ -25,6 +25,7 @@ subtest load => sub {
     is( load("flavor: f\nsource: { git: /bogus/std.git, ref: v1, path: a/b }\nskip: [X]\nchecks: { Y: { k: 1 } }\nvariables: { DIST: D }\n")->{source}, { git => '/bogus/std.git', ref => 'v1', path => 'a/b' }, 'a git source' );
     like( dies { Dist::Conformance::Config::load( Dist::Conformance::Snapshot::Directory->new( root => Fixture::checkout() ) ) }, qr/has\ no\ [.]conformance[.]yml/,            'a missing file is an error' );
     like( dies { load("flavor: [\n") },                                                                                           qr/\A[.]conformance[.]yml\ does\ not\ parse/, 'and so is one that does not parse' );
+    like( dies { load("flavor: [\n") },                                                                                           qr/did\ not\ find\ expected\ node\ content/,  'and the message says what YAML::XS found wrong' );
 };
 
 subtest 'load: what is refused' => sub {
