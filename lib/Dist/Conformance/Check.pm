@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base -base, -signatures;
 
-use Carp ();
 use List::Util();
 
 use Dist::Conformance::Schema();
@@ -262,7 +261,7 @@ implement it.
 
 =cut
 
-sub check ( $self, $ ) { Carp::croak( ref($self) . ' does not implement check' ) }
+sub check ( $self, $ ) { die( ref($self) . " does not implement check\n" ) }
 
 =method update
 

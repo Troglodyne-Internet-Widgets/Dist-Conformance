@@ -6,7 +6,6 @@ use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
 
-use Carp  ();
 use Clone ();
 use Cpanel::JSON::XS();
 use JSON::Validator::Schema::Troglodyne();
@@ -76,8 +75,8 @@ when its top level is not a mapping.
 
 sub parse_yaml ( $text, $where ) {
     my $data = eval { YAML::XS::Load($text) };
-    Carp::croak( "$where does not parse as YAML: " . first_line($@) ) if !defined $data && $@;
-    Carp::croak("$where does not hold a mapping at its top level")    if ref $data ne 'HASH';
+    die "$where does not parse as YAML: $@"                 if !defined $data && $@;
+    die "$where does not hold a mapping at its top level\n" if ref $data ne 'HASH';
     return $data;
 }
 
@@ -89,8 +88,8 @@ C<($bytes, $where)>.  The same as L</parse_yaml>, for UTF-8 JSON text.
 
 sub parse_json ( $bytes, $where ) {
     my $data = eval { Cpanel::JSON::XS->new->utf8->decode($bytes) };
-    Carp::croak( "$where does not parse as JSON: " . first_line($@) ) if !defined $data && $@;
-    Carp::croak("$where does not hold an object at its top level")    if ref $data ne 'HASH';
+    die( "$where does not parse as JSON: " . first_line($@), "\n" ) if !defined $data && $@;
+    die "$where does not hold an object at its top level\n"         if ref $data ne 'HASH';
     return $data;
 }
 
@@ -120,7 +119,7 @@ changed.
 sub validate ( $data, $schema, $where ) {
     my $copy   = Clone::clone($data);
     my @errors = errors( $copy, $schema );
-    Carp::croak( join "\n", "$where is not valid:", map { "  $_" } @errors ) if @errors;
+    die join( "\n", "$where is not valid:", map { "  $_" } @errors ), "\n" if @errors;
     return $copy;
 }
 
@@ -163,15 +162,16 @@ of a path that a flavor names goes through it.
 
 sub relative_path ( $path, $inside ) {
 
-    Carp::croak( ( $path // 'undef' ) . " is not a relative path inside $inside" ) if !matches( $PATH, $path );
+    die( ( $path // 'undef' ) . " is not a relative path inside $inside\n" ) if !matches( $PATH, $path );
     return $path;
 }
 
 =func first_line
 
-C<($text)>.  The first line of an error, without the "at FILE line N" that
-perl adds, for a message that is about a file of the user and not about a line
-of this code.
+C<($text)>.  The first line of an error from other code, without the "at FILE
+line N" that perl adds to it, for a message that is about a file of the user
+and not about a line of this code.  The errors of this distribution end in a
+newline, so perl adds nothing to them.
 
 =cut
 

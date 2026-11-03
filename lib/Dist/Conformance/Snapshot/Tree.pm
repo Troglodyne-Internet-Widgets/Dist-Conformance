@@ -7,8 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base 'Dist::Conformance::Snapshot', -signatures;
 
-use Carp ();
-
 =head1 SYNOPSIS
 
     use 5.040;
@@ -52,8 +50,8 @@ Dies unless L</paths> is a hash and L</fetch> is code.
 
 sub new ( $class, @args ) {
     my $self = $class->SUPER::new(@args);
-    Carp::croak('paths must be a hash reference of path => blob SHA') if ref $self->paths ne 'HASH';
-    Carp::croak('fetch must be a code reference')                     if ref $self->fetch ne 'CODE';
+    die "paths must be a hash reference of path => blob SHA\n" if ref $self->paths ne 'HASH';
+    die "fetch must be a code reference\n"                     if ref $self->fetch ne 'CODE';
     return $self;
 }
 

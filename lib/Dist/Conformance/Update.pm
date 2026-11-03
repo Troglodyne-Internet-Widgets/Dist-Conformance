@@ -7,8 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base -base, -signatures;
 
-use Carp ();
-
 =head1 SYNOPSIS
 
     use 5.040;
@@ -66,7 +64,7 @@ Dies unless L</snapshot> is writable.
 sub new ( $class, @args ) {
     my $self     = $class->SUPER::new(@args);
     my $snapshot = $self->snapshot;
-    Carp::croak('An update needs a snapshot that it can write, such as a Dist::Conformance::Snapshot::Directory') if !$snapshot || !$snapshot->writable;
+    die "An update needs a snapshot that it can write, such as a Dist::Conformance::Snapshot::Directory\n" if !$snapshot || !$snapshot->writable;
     return $self;
 }
 

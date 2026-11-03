@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base 'Dist::Conformance::Snapshot', -signatures;
 
-use Carp ();
 use File::Find();
 use File::Slurper::Temp();
 use Mojo::File();
@@ -66,8 +65,8 @@ Dies unless L</root> is a directory.
 
 sub new ( $class, @args ) {
     my $self = $class->SUPER::new(@args);
-    Carp::croak('root is required')                              if !defined $self->root;
-    Carp::croak( 'root ' . $self->root . ' is not a directory' ) if !-d $self->root;
+    die "root is required\n"                               if !defined $self->root;
+    die( 'root ' . $self->root . " is not a directory\n" ) if !-d $self->root;
     $self->root( Mojo::File->new( $self->root ) );
     return $self;
 }
@@ -168,7 +167,7 @@ sub write ( $self, $path, $bytes, $mode = oct 644 ) {    ## no critic (Subroutin
     my $file = $self->file($path);
     $file->dirname->make_path;
     File::Slurper::Temp::write_binary( "$file", $bytes );
-    chmod $mode, "$file" or Carp::croak("Cannot chmod $file: $!");
+    chmod $mode, "$file" or die("Cannot chmod $file: $!\n");
     return $file;
 }
 
@@ -213,12 +212,12 @@ Dies when the root is not a checkout.
 =cut
 
 sub install_hook ( $self, $name, $bytes ) {
-    Carp::croak("$name is not a hook name") if $name !~ m{\A[[:lower:]][[:lower:]-]*\z};
-    my $dir = $self->hooks_dir // Carp::croak( $self->root . ' is not a git checkout' );
+    die "$name is not a hook name\n" if $name !~ m{\A[[:lower:]][[:lower:]-]*\z};
+    my $dir = $self->hooks_dir // die( $self->root . " is not a git checkout\n" );
     $dir->make_path;
     my $hook = $dir->child($name);
     File::Slurper::Temp::write_binary( "$hook", $bytes );
-    chmod oct 755, "$hook" or Carp::croak("Cannot chmod $hook: $!");
+    chmod oct 755, "$hook" or die("Cannot chmod $hook: $!\n");
     return $hook;
 }
 

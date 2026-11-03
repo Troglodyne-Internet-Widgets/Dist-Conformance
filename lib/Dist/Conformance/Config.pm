@@ -6,8 +6,6 @@ use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
 
-use Carp ();
-
 use Dist::Conformance::Schema();
 
 =head1 SYNOPSIS
@@ -141,7 +139,7 @@ valid.
 =cut
 
 sub load ($snapshot) {
-    my $text = $snapshot->content($FILE) // Carp::croak("The repository has no $FILE, so it names no flavor");
+    my $text = $snapshot->content($FILE) // die("The repository has no $FILE, so it names no flavor\n");
     return validate( Dist::Conformance::Schema::parse_yaml( $text, $FILE ) );
 }
 

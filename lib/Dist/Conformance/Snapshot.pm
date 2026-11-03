@@ -7,7 +7,6 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base -base, -signatures;
 
-use Carp ();
 use Digest::SHA();
 
 =head1 SYNOPSIS
@@ -44,7 +43,7 @@ A subclass must implement it.
 
 =cut
 
-sub paths ($self) { Carp::croak( ref($self) . ' does not implement paths' ) }
+sub paths ($self) { die( ref($self) . " does not implement paths\n" ) }
 
 =method content
 
@@ -53,7 +52,7 @@ snapshot has no such path.  A subclass must implement it.
 
 =cut
 
-sub content ( $self, $ ) { Carp::croak( ref($self) . ' does not implement content' ) }
+sub content ( $self, $ ) { die( ref($self) . " does not implement content\n" ) }
 
 =method contains
 
