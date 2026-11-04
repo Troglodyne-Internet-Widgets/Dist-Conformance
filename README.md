@@ -186,7 +186,7 @@ Current Maintainers:
 # CONTRIBUTORS
 
 - troglodyne-bot <morpheus@troglodyne.net>
-- troglodyne-robot <352534226+troglodyne-robot@users.noreply.github.com>
+- troglodyne-robot <trogbot@troglodyne.net>
 
 # COPYRIGHT AND LICENSE
 
