@@ -183,9 +183,10 @@ Current Maintainers:
 
 - George S. Baugh <george@troglodyne.net>
 
-# CONTRIBUTOR
+# CONTRIBUTORS
 
-troglodyne-bot <morpheus@troglodyne.net>
+- troglodyne-bot <morpheus@troglodyne.net>
+- troglodyne-robot <352534226+troglodyne-robot@users.noreply.github.com>
 
 # COPYRIGHT AND LICENSE
 
