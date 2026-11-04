@@ -147,17 +147,34 @@ sub lacks (@missing) {
     return 'lacks the ' . ( @missing == 1 ? 'policy ' : 'policies ' ) . join ', ', @missing;
 }
 
+=method verdict
+
+C<($text)>.  The status and the detail of the profile C<$text>, as C<check>
+returns them, and for a failure, what a person must do to fix it by hand.
+
+=cut
+
+sub verdict ( $self, $text ) {
+    my ( $file, $template ) = @{ $self->config }{qw{file template}};
+    my @missing = eval { $self->missing_policies($text) };
+    if ($@) {
+        my $detail = Dist::Conformance::Schema::first_line($@);
+        return ( 'fail', $detail, "$detail: fix it by hand, or set replace: true to overwrite it" );
+    }
+    return ( 'pass', "has every policy of $template" ) if !@missing;
+    my $detail = lacks(@missing) . " of $template";
+    return ( 'fail', $detail, "$file $detail: add each one to it by hand, or add it as [-Name] to turn it off on purpose, or set replace: true to overwrite it" );
+}
+
 =method check
 
 =cut
 
 sub check ( $self, $snapshot ) {
-    my ( $file, $template ) = @{ $self->config }{qw{file template}};
-    my $text    = $snapshot->content($file) // return ( 'fail', "$file is missing" );
-    my @missing = eval { $self->missing_policies($text) };
-    return ( 'fail', Dist::Conformance::Schema::first_line($@) ) if $@;
-    return ( 'pass', "has every policy of $template" )           if !@missing;
-    return ( 'fail', lacks(@missing) . " of $template" );
+    my $file = $self->config->{file};
+    my $text = $snapshot->content($file) // return ( 'fail', "$file is missing" );
+    my ( $status, $detail ) = $self->verdict($text);
+    return ( $status, $detail );
 }
 
 =method update
@@ -170,18 +187,12 @@ C<replace> is true.  Otherwise names what to add by hand.
 sub update ( $self, $update ) {
     my ( $file, $template ) = @{ $self->config }{qw{file template}};
     my $text = $update->snapshot->content($file);
-    if ( defined $text && !$self->config->{replace} ) {
-        my @missing = eval { $self->missing_policies($text) };
-        if ($@) {
-            $update->by_hand( Dist::Conformance::Schema::first_line($@) . ': fix it by hand, or set replace: true to overwrite it' );
-        }
-        elsif (@missing) {
-            $update->by_hand( "$file " . lacks(@missing) . " of $template: add each one to it by hand, or add it as [-Name] to turn it off on purpose, or set replace: true to overwrite it" );
-        }
-        return;
+    if ( defined $text ) {
+        my ( $status, undef, $by_hand ) = $self->verdict($text);
+        return                            if $status eq 'pass';
+        return $update->by_hand($by_hand) if !$self->config->{replace};
     }
-    my ($status) = $self->check( $update->snapshot );
-    $self->write_template( $update, $file, $template ) if $status ne 'pass';
+    $self->write_template( $update, $file, $template );
     return;
 }
 
