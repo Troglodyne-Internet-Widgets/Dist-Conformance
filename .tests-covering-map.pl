@@ -42,6 +42,10 @@ F<xt/>, which the hooks do not run.
 
 =back
 
+A file of the fixture standards in F<t/data/standards/> reaches each test
+that loads F<t/lib/Fixture.pm>, and F<t/Dist-Conformance-Flavor.t>, which
+reads them without it.
+
 Anything else, it leaves unexplained, and the hook then runs every test.  A
 file that a test reads without loading it, such as a template or a fixture,
 wants a rule here that names the tests that read it.
@@ -63,6 +67,8 @@ return sub {
     return q{} if $path =~ m{\A(?:git-hooks|[.]github|xt)/}sx;
     return q{} if $path =~ m{[.]md\z}sx;
     return q{} if $path =~ m{[.]pod\z}sx && $path !~ m{\Alib/}sx;
+
+    return ( 't/lib/Fixture.pm', 't/Dist-Conformance-Flavor.t' ) if $path =~ m{\At/data/standards/}sx;
 
     return;
 };
