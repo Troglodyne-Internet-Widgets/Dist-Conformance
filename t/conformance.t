@@ -95,31 +95,75 @@ subtest 'errors' => sub {
     like( run_main('nonsense')->{err}, qr/Usage:/, 'with the usage on standard error' );
 };
 
+my $METAMERGE = <<'YAML';
+x_system_packages:
+  deb:
+    - ffmpeg
+    - name: libssl3
+      ubuntu/24.04: libssl3t64
+    - debian: libbar
+  rpm: [ffmpeg-free]
+  sources:
+    deb:
+      - name: jellyfin
+        uri: https://repo.test.test/ubuntu
+        suites: ['{codename}']
+        components: [main]
+        key: https://repo.test.test/key.gpg
+        fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567
+        distros: [ubuntu]
+  programs: ['ffmpeg -version', 'file --version']
+YAML
+
 subtest 'packages' => sub {
-    my $root = Fixture::checkout( 'metamerge.yml' => "x_system_packages:\n  deb: [ffmpeg, libmagic-dev]\n  rpm: [ffmpeg-free]\n  programs: ['ffmpeg -version', 'file --version']\n" );
-    is( run_main( 'packages',                  $root ),        { out => "ffmpeg\nlibmagic-dev\n", err => q{}, status => 0 }, 'the deb packages, one per line, and nothing else' );
-    is( run_main( qw{packages --packager rpm}, $root )->{out}, "ffmpeg-free\n",                                              'or those of another packager' );
-    is( run_main( qw{packages --packager pkg}, $root ),        { out => q{}, err => q{}, status => 0 },                      'a packager that the declaration does not name has none' );
-    is( run_main( qw{packages --programs},     $root )->{out}, "ffmpeg -version\nfile --version\n",                          'and the programs, with --programs' );
+    my $root   = Fixture::checkout( 'metamerge.yml' => $METAMERGE, 'noble' => qq{ID=ubuntu\nVERSION_ID="24.04"\nVERSION_CODENAME='noble'\n}, 'bookworm' => "ID=debian\nVERSION_ID=\"12\"\nVERSION_CODENAME=bookworm\n" );
+    my @noble  = ( '--os-release', $root->child('noble') );
+    my @debian = ( '--os-release', $root->child('bookworm') );
+    is( run_main( 'packages', @noble, $root ),                                                                                  { out => "ffmpeg\nlibssl3t64\n", err => q{}, status => 0 }, 'the deb packages of the host of the os-release, one per line, and nothing else' );
+    is( run_main( 'packages', @debian, $root )->{out},                                                                          "ffmpeg\nlibssl3\nlibbar\n",                                'and of another host' );
+    is( run_main( qw{packages --distro debian --release 12 --codename bookworm --os-release /bogus/os-release}, $root )->{out}, "ffmpeg\nlibssl3\nlibbar\n",                                'the host can be given, and then no os-release is read' );
+    is( run_main( 'packages', @noble, qw{--distro debian}, $root )->{out},                                                      "ffmpeg\nlibssl3\nlibbar\n",                                'an option replaces one value of the os-release' );
+    is( run_main( qw{packages --packager rpm}, @noble, $root )->{out},                                                          "ffmpeg-free\n",                                            'or those of another packager' );
+    is( run_main( qw{packages --packager pkg --os-release /bogus/os-release}, $root ),                                          { out => q{}, err => q{}, status => 0 },                    'a packager that the declaration does not name has none, and needs no os-release' );
+    is( run_main( qw{packages --programs --os-release /bogus/os-release}, $root )->{out},                                       "ffmpeg -version\nfile --version\n",                        'and the programs, with --programs, need none either' );
+
+    my $sources = run_main( qw{packages --sources}, @noble, $root );
+    is( $sources->{status}, 0, '--sources exits 0' );
+    is(
+        [ map { Dist::Conformance::Schema::parse_json( $_, 'a line' ) } split /\n/, $sources->{out} ],
+        [ { name => 'jellyfin', uri => 'https://repo.test.test/ubuntu', suites => ['noble'], components => ['main'], key => 'https://repo.test.test/key.gpg', fingerprint => '0123456789ABCDEF0123456789ABCDEF01234567' } ],
+        'and prints each source of the host as a line of JSON, resolved'
+    );
+    is( run_main( qw{packages --sources},            @debian, $root )->{out},    q{}, 'and none for a host that no source is for' );
+    is( run_main( qw{packages --sources --programs}, @noble,  $root )->{status}, 2,   'but not with --programs' );
 
     my $cwd = Cwd::getcwd();
     chdir $root or die "Cannot chdir to $root: $!";
-    my $here = run_main('packages');
+    my $here = run_main( 'packages', @noble );
     chdir $cwd or die "Cannot chdir to $cwd: $!";
-    is( $here->{out}, "ffmpeg\nlibmagic-dev\n", 'the directory defaults to the current one' );
+    is( $here->{out}, "ffmpeg\nlibssl3t64\n", 'the directory defaults to the current one' );
 
-    is( run_main( 'packages',              Fixture::checkout() ),                                                          { out => q{}, err => q{}, status => 0 }, 'no declaration prints nothing, and exits 0' );
-    is( run_main( qw{packages --programs}, Fixture::checkout( 'metamerge.yml' => "x_system_packages: { deb: [xz] }\n" ) ), { out => q{}, err => q{}, status => 0 }, 'and no programs prints none' );
+    is( run_main( qw{packages --os-release /bogus/os-release}, Fixture::checkout() ),                                                          { out => q{}, err => q{}, status => 0 }, 'no declaration prints nothing, and exits 0' );
+    is( run_main( qw{packages --programs},                     Fixture::checkout( 'metamerge.yml' => "x_system_packages: { deb: [xz] }\n" ) ), { out => q{}, err => q{}, status => 0 }, 'and no programs prints none' );
 
-    my $bad = run_main( 'packages', Fixture::checkout( 'metamerge.yml' => "x_system_packages:\n  deb: [ffmpeg-]\n" ) );
+    my $no_os = run_main( qw{packages --os-release /bogus/os-release}, $root );
+    is( $no_os->{status}, 2,   'an os-release that cannot be read exits 2' );
+    is( $no_os->{out},    q{}, 'and prints no package' );
+    like( $no_os->{err}, qr{\Aconformance:\ Cannot\ read\ /bogus/os-release:}, 'and says so' );
+
+    my $no_codename = run_main( qw{packages --distro ubuntu --release 24.04 --os-release}, Fixture::checkout( 'os-release' => "ID=ubuntu\n" )->child('os-release'), '--sources', $root );
+    is( $no_codename->{status}, 2, 'a source that needs a codename that the host does not have exits 2' );
+    like( $no_codename->{err}, qr{needs\ the\ codename}, 'and says so' );
+
+    my $bad = run_main( 'packages', @noble, Fixture::checkout( 'metamerge.yml' => "x_system_packages:\n  deb: [ffmpeg-]\n" ) );
     is( $bad->{status}, 2,   'an invalid declaration exits 2' );
     is( $bad->{out},    q{}, 'and prints no package' );
     like( $bad->{err}, qr{\Aconformance:\ \S+\ is\ not\ valid:\n\ \ /x_\w+/deb/0:}, 'and says why on standard error' );
 
-    my $packager = run_main( qw{packages --packager ../deb}, $root );
+    my $packager = run_main( qw{packages --packager ../deb}, @noble, $root );
     is( $packager->{status}, 2, 'a packager that is not a name exits 2' );
     like( $packager->{err}, qr{\Aconformance:\ [.][.]/deb\ is\ not\ the\ name}, 'and says so' );
-    is( run_main( 'packages', $root, $root )->{status}, 2, 'and so does a second directory' );
+    is( run_main( 'packages', @noble, $root, $root )->{status}, 2, 'and so does a second directory' );
     is( run_main( qw{packages --bogus}, $root )->{status}, 2, 'and an unknown option' );
 };
 

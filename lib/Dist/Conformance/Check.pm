@@ -145,7 +145,7 @@ The CI workflows exist.
 
 =item L<Dist::Conformance::Check::SystemPackages>
 
-The system packages that F<metamerge.yml> declares are plain names.
+The system packages and archives that F<metamerge.yml> declares are valid.
 
 =back
 

@@ -4,11 +4,16 @@ Revision history for Dist-Conformance
     - New check SystemPackages: a repository declares the packages of the
       operating system that it needs under x_system_packages in
       metamerge.yml, for each packager, with the programs that must run
-      once they are installed.  The check refuses a name that is not a
-      plain package name, such as a deb name that ends in -, which apt
-      reads as a removal.  Dist::Conformance::Check::SystemPackages->declared
-      returns the validated declaration of a snapshot or a directory, and
-      conformance packages prints it for a shell script.
+      once they are installed.  An entry can name a package for one distro,
+      or one release of it, and the third-party archives of deb go under
+      sources, each with the full fingerprint of its signing key.  The check
+      refuses a name that is not a plain package name, such as a deb name
+      that ends in -, which apt reads as a removal.
+      Dist::Conformance::Check::SystemPackages->declared returns the
+      validated declaration of a snapshot or a directory, and ->resolve
+      what one host installs.  conformance packages prints the packages,
+      programs or sources for the host of /etc/os-release, for a shell
+      script.
 
 0.002 2026-11-04 TEODESIAN
     - CriticProfile compares the policies of the profile with those of its

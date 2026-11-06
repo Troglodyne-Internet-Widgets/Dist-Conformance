@@ -11,6 +11,7 @@ use re '/aasx';
 use Cpanel::JSON::XS();
 use Getopt::Long();
 use List::Util();
+use Mojo::File();
 use Pod::Usage();
 
 use Dist::Conformance();
@@ -21,7 +22,7 @@ use Dist::Conformance::Schema();
 
     conformance check  [--root DIR] [--json] [--offline] [--cache DIR] [--standards DIR]
     conformance update [--root DIR] [--dry-run] [--json] [--offline] [--cache DIR] [--standards DIR]
-    conformance packages [--packager NAME | --programs] [DIR]
+    conformance packages [--packager NAME] [--distro ID --release VERSION_ID --codename CODENAME] [--os-release FILE] [--programs | --sources] [DIR]
     conformance help
 
 =head1 DESCRIPTION
@@ -51,20 +52,32 @@ whatever it left for a person; run C<check> afterwards to see what still fails.
 
 =item packages
 
-Prints the system packages that the checkout in DIR declares in
-F<metamerge.yml>, one name on each line, for the packager C<--packager>,
-default C<deb>.  With C<--programs> it prints the command lines of
-C<programs> instead.  DIR defaults to the current directory.
-L<Dist::Conformance::Check::SystemPackages> says what the declaration holds.
+Prints what the checkout in DIR declares in F<metamerge.yml> for this host:
+the names of the packages for the packager C<--packager>, default C<deb>, one
+on each line.  DIR defaults to the current directory.
+L<Dist::Conformance::Check::SystemPackages> says what the declaration holds,
+and how an entry for a distro or a release resolves for a host.
 
-It reads only F<metamerge.yml>: it needs no F<.conformance.yml>, no standards
-and no network, so a script can run it on a host that it provisions, such as:
+The host is C<--distro>, C<--release> and C<--codename>, which are the C<ID>,
+C<VERSION_ID> and C<VERSION_CODENAME> of F</etc/os-release>.  Each one that is
+not given is read from that file, or from the file of C<--os-release>.
+
+With C<--programs> it prints the command lines of C<programs> instead, and
+reads no F</etc/os-release>.  With C<--sources> it prints each source of the
+packager that applies to the host, with its suites resolved, as one JSON
+object on each line.
+
+It reads only F<metamerge.yml> and F</etc/os-release>: it needs no
+F<.conformance.yml>, no standards and no network, so a script can run it on a
+host that it provisions, such as:
 
     apt-get install -y $(conformance packages /bogus/checkout)
 
 It prints nothing else on standard output.  When the checkout declares nothing
-for the packager, it prints nothing and exits 0.  When the declaration is not
-valid, it prints no package, and exits 2 with the errors on standard error.
+for the host, it prints nothing and exits 0.  When the declaration is not
+valid, when F</etc/os-release> cannot be read, or when a source needs a
+codename that the host does not have, it prints nothing, and exits 2 with the
+reason on standard error.
 
 =item help
 
@@ -153,21 +166,43 @@ C<(@arguments)>.  Runs C<packages>, and returns its exit status.
 =cut
 
 sub report_packages (@arguments) {
-    my %options = ( packager => 'deb' );
-    my $parsed  = Getopt::Long::GetOptionsFromArray( \@arguments, \%options, qw{packager=s programs} );
-    return show_synopsis(2) if !$parsed || @arguments > 1;
-    my $packager = $options{programs} ? 'programs' : $options{packager};
-    if ( !$options{programs} && !Dist::Conformance::Schema::matches( { pattern => $Dist::Conformance::Check::SystemPackages::PACKAGER }, $packager ) ) {
-        warn "conformance: $packager is not the name of a packager\n";
-        return 2;
-    }
-    my $declared = eval { Dist::Conformance::Check::SystemPackages->declared( $arguments[0] // q{.} ) };
-    if ( !defined $declared ) {
+    my %options = ( packager => 'deb', 'os-release' => '/etc/os-release' );
+    my $parsed  = Getopt::Long::GetOptionsFromArray( \@arguments, \%options, qw{packager=s distro=s release=s codename=s os-release=s programs sources} );
+    return show_synopsis(2) if !$parsed || @arguments > 1 || ( $options{programs} && $options{sources} );
+    my $lines = eval { packages_lines( $arguments[0] // q{.}, \%options ) };
+    if ( !defined $lines ) {
         warn "conformance: $@";
         return 2;
     }
-    print {*STDOUT} map { "$_\n" } @{ $declared->{$packager} // [] } or return 2;
+    print {*STDOUT} map { "$_\n" } @$lines or return 2;
     return 0;
+}
+
+=func packages_lines
+
+C<($directory, \%options)>.  The lines that C<packages> prints.  Dies with the
+reason when it cannot print them.
+
+=cut
+
+sub packages_lines ( $directory, $options ) {
+    my $packager = $options->{packager};
+    die "$packager is not the name of a packager\n" if !Dist::Conformance::Schema::matches( { pattern => $Dist::Conformance::Check::SystemPackages::PACKAGER }, $packager );
+    my $declared = Dist::Conformance::Check::SystemPackages->declared($directory);
+    return $declared->{programs} if $options->{programs};
+    return []                    if !$declared->{$packager} && !( $declared->{sources} // {} )->{$packager};
+
+    my %host = ( distro => 'ID', release => 'VERSION_ID', codename => 'VERSION_CODENAME' );
+    if ( List::Util::any { !defined $options->{$_} } keys %host ) {
+        my $file       = $options->{'os-release'};
+        my $text       = eval { Mojo::File->new($file)->slurp } // die( "Cannot read $file: " . Dist::Conformance::Schema::first_line($@) . "\n" );
+        my $os_release = Dist::Conformance::Check::SystemPackages::os_release($text);
+        $options->{$_} //= $os_release->{ $host{$_} } for keys %host;
+    }
+    my $resolved = Dist::Conformance::Check::SystemPackages->resolve( $declared, packager => $packager, map { $_ => $options->{$_} } keys %host );
+    return $resolved->{packages} if !$options->{sources};
+    my $json = Cpanel::JSON::XS->new->utf8->canonical;
+    return [ map { $json->encode($_) } @{ $resolved->{sources} } ];
 }
 
 =func report_check
