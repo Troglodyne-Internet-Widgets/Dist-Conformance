@@ -119,8 +119,20 @@ changed.
 sub validate ( $data, $schema, $where ) {
     my $copy   = Clone::clone($data);
     my @errors = errors( $copy, $schema );
-    die join( "\n", "$where is not valid:", map { "  $_" } @errors ), "\n" if @errors;
+    refuse( $where, @errors ) if @errors;
     return $copy;
+}
+
+=func refuse
+
+C<($where, @errors)>.  Dies with the message of L</validate>: C<$where is not
+valid:>, and then each error on a line of its own.  For a check of the data
+that a schema cannot express, so that its errors read as those of the schema.
+
+=cut
+
+sub refuse ( $where, @errors ) {
+    die join( "\n", "$where is not valid:", map { "  $_" } @errors ), "\n";
 }
 
 =func errors

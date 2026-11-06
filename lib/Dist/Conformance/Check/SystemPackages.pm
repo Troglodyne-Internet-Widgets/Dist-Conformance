@@ -25,6 +25,7 @@ use Dist::Conformance::Snapshot::Directory();
         release  => '24.04',
         codename => 'noble',
     );
+    die "No package for @{ $host->{unresolved} }\n" if @{ $host->{unresolved} };
     say for @{ $host->{packages} };
 
 =head1 IN A FLAVOR
@@ -35,54 +36,83 @@ use Dist::Conformance::Snapshot::Directory();
 =head1 DESCRIPTION
 
 CPAN has no field for a package of the operating system, such as F<ffmpeg> or
-F<libmagic-dev>, that a distribution needs.  So a repository declares them
-under C<x_system_packages> in F<metamerge.yml>, the file that C<[MetaMergeFile]>
-of Dist::Zilla merges into F<META.json>:
+F<libmagic-dev>, that a distribution needs.  So a repository declares them in
+F<metamerge.yml>, the file that C<[MetaMergeFile]> of Dist::Zilla merges into
+F<META.json>.  C<x_system_packages> names each dependency, and says which
+package gives it for each packager.  C<x_system_sources> names the
+third-party archives that some of the packages come from:
 
     x_system_packages:
-      deb:
-        - ffmpeg
-        - name: libssl3
-          ubuntu/24.04: libssl3t64
-        - ubuntu/24.04: libfoo-t64
-        - debian: libbar
-      sources:
+      FooLib:
         deb:
-          - name: jellyfin
-            uri: https://repo.test.test/ubuntu
-            suites: ['{codename}']
-            components: [main]
-            key: https://repo.test.test/key.gpg
-            fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567
-            distros: [ubuntu/24.04, ubuntu/22.04]
-      programs:
-        - ffmpeg -version
-
-Each key other than C<programs> and C<sources> is the name of a packager: a
-lowercase letter, then lowercase letters and digits, as
-C<< Provisioner::Packager->named >> takes it.  Its value is a list of entries,
-and each entry says which package to install.  C<sources> holds the
-third-party archives that the packages come from, for each packager.
-C<programs> is optional.  It is a list of command lines that must exit 0 once
-the packages are installed, because a package that is installed is not yet a
-program that runs.
+          name: libfoo-devel
+          ubuntu/24.04: libfoo-dev
+          debian/13: ~
+        rpm: libfoo-devel
+      ffmpeg:
+        deb:
+          name: ffmpeg
+          source: jellyfin
+        test: ffmpeg -version
+    x_system_sources:
+      deb:
+        - name: jellyfin
+          uri: https://repo.test.test/ubuntu
+          suites: ['{codename}']
+          components: [main]
+          key: https://repo.test.test/key.gpg
+          fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567
+          distros: [ubuntu/24.04]
 
 The declaration says what a host must install.  This check does not ask what
 a host has installed.  It reads a snapshot, which can be of a repository that
-is not on this machine, and does not run the programs.  Other code installs the
+is not on this machine, and does not run the tests.  Other code installs the
 packages: it reads them with L</declared> and L</resolve>, or with
 C<conformance packages> (see L<conformance>).
 
+=head2 A dependency
+
+A key of C<x_system_packages> is the name of a dependency: a letter or a
+digit, then letters, digits, C<_>, C<.>, C<+>, C<:> and C<->, such as
+C<Foo::Lib> or C<ffmpeg>.  The name is for people and for reports.  No
+packager reads it.
+
+Its value is a mapping.  Each key other than C<test> is the name of a
+packager: a lowercase letter, then lowercase letters and digits, as
+C<< Provisioner::Packager->named >> takes it.  A dependency has one packager at
+least.  C<test> is optional.  It is one command line that must exit 0 once the
+package is installed, because a package that is installed is not yet a
+program that runs.  It is one line that is not blank.
+
 =head2 An entry
 
-An entry is a package name, which applies to every host, or a mapping.  A key
-of the mapping is C<name>, C<DISTRO> or C<DISTRO/RELEASE>, and its value is a
-package name.  C<DISTRO> is the C<ID> of F</etc/os-release>, such as C<ubuntu>
-or C<debian>, and C<RELEASE> is its C<VERSION_ID>, such as C<24.04> or C<12>.
-Both are lowercase letters, digits, C<.>, C<_> and C<->.  For a host, the most
-specific key wins: C<DISTRO/RELEASE>, then C<DISTRO>, then C<name>.  An entry
-without a key that matches the host is skipped on that host.  A mapping with
-no key is not valid.
+The value of a packager is the entry of the dependency for that packager.  It
+is a package name, which applies to every host, or a mapping with these keys:
+
+=over
+
+=item name
+
+The package on a host that no other key matches.
+
+=item C<DISTRO>, C<DISTRO/RELEASE>
+
+The package on that distro, or on that release of it.  C<DISTRO> is the C<ID>
+of F</etc/os-release>, such as C<ubuntu> or C<debian>, and C<RELEASE> is its
+C<VERSION_ID>, such as C<24.04> or C<13>.  Both are lowercase letters,
+digits, C<.>, C<_> and C<->.  A null value says that the host needs no
+package for the dependency.
+
+=item source
+
+Optional.  The name of the archive in C<x_system_sources> of the same
+packager that the package comes from.
+
+=back
+
+The mapping has C<name>, or a C<DISTRO> or C<DISTRO/RELEASE> key, or both.
+For a host, the most specific key wins: C<DISTRO/RELEASE>, then C<DISTRO>,
+then C<name>.
 
 =head2 What a package name is
 
@@ -105,21 +135,19 @@ and not ending in C<->, until the packager has a rule of its own here.
 
 =back
 
-A list of entries, a list of sources, and C<programs> must hold at least one
-item.  A program is a line that is not blank, so that
-C<conformance packages --programs> can print one on each line.
-
 =head2 A source
 
-Only C<deb> takes sources.  A source of C<deb> is an apt archive, with the keys
-of a source of C<Provisioner::Packager::Deb>, and two more:
+C<x_system_sources> has a list of sources for each packager.  Only C<deb>
+takes sources.  A source of C<deb> is an apt archive, with the keys of a source
+of C<Provisioner::Packager::Deb>, and two more:
 
 =over
 
 =item name
 
-The base name of the files of the source: lowercase letters, digits, C<.> and
-C<->, from a letter or a digit.
+The name that an entry gives as C<source>, and the base name of the files of
+the source: lowercase letters, digits, C<.> and C<->, from a letter or a
+digit.  Two sources of a packager do not have the same name.
 
 =item C<uri>, C<key>
 
@@ -156,13 +184,16 @@ source applies only to a host that one of them matches.  Default every host.
 
 =back
 
+Each source is the C<source> of an entry of the same packager.  A source that
+no entry names is not valid, because nothing would install from it.
+
 =head1 STATUSES
 
-The check passes when there is no F<metamerge.yml>, when it has no
-C<x_system_packages>, and when the declaration is valid, because most
-repositories need no system packages.  It fails when F<metamerge.yml> does not
-parse, or when the declaration is not valid.  The update changes nothing: what
-a repository needs is its own choice.
+The check passes when there is no F<metamerge.yml>, when it declares nothing,
+and when the declaration is valid, because most repositories need no system
+packages.  It fails when F<metamerge.yml> does not parse, or when the
+declaration is not valid.  The update changes nothing: what a repository needs
+is its own choice.
 
 =head1 CONFIGURATION
 
@@ -170,11 +201,14 @@ None, other than L<Dist::Conformance::Check/THE KEYS THAT EVERY CHECK TAKES>.
 
 =cut
 
-our $FILE = 'metamerge.yml';
-our $KEY  = 'x_system_packages';
+our $FILE        = 'metamerge.yml';
+our $PACKAGES    = 'x_system_packages';
+our $SOURCES     = 'x_system_sources';
+our $DEPENDENCY  = '\A[A-Za-z0-9][A-Za-z0-9_.+:-]*\z';
+our $SOURCE_NAME = '\A[a-z0-9][a-z0-9.-]*\z';
 
-# The name of a packager, as Provisioner::Packager->named takes it.  programs and sources are not one.
-our $PACKAGER = '\A(?!(?:programs|sources)\z)[a-z][a-z0-9]*\z';
+# The name of a packager, as Provisioner::Packager->named takes it.  test is not one.
+our $PACKAGER = '\A(?!test\z)[a-z][a-z0-9]*\z';
 
 our %PACKAGE_NAME = ( deb => '\A[a-z0-9][a-z0-9+.-]*[a-z0-9+.]\z' );
 
@@ -192,10 +226,9 @@ my sub entry_of ($pattern) {
             $name,
             {
                 type                 => 'object',
-                minProperties        => 1,
                 additionalProperties => 0,
-                properties           => { name                 => $name },
-                patternProperties    => { '(?!name\z)' . $HOST => $name },
+                properties           => { name => $name, source => { type => 'string', pattern => $SOURCE_NAME } },
+                patternProperties    => { '(?!(?:name|source)\z)' . $HOST => { %$name, nullable => 1 } },
             },
         ],
     };
@@ -209,7 +242,7 @@ our %SOURCE = (
         required             => [qw{name uri suites components key fingerprint}],
         additionalProperties => 0,
         properties           => {
-            name          => { type => 'string', pattern => '\A[a-z0-9][a-z0-9.-]*\z' },
+            name          => { type => 'string', pattern => $SOURCE_NAME },
             uri           => $URL,
             key           => $URL,
             suites        => list_of( { type => 'string', pattern => '\A(?:[^\s{}]|\{codename\})+\z' } ),
@@ -228,21 +261,30 @@ our %SOURCE = (
 );
 
 our $SCHEMA = {
-    type                 => 'object',
-    additionalProperties => 0,
-    properties           => {
-        programs => list_of( { type => 'string', pattern => '\A[^\n]*\S[^\n]*\z' } ),
-        sources  => {
+    type       => 'object',
+    properties => {
+        $PACKAGES => {
+            type                 => 'object',
+            additionalProperties => 0,
+            patternProperties    => {
+                $DEPENDENCY => {
+                    type                 => 'object',
+                    additionalProperties => 0,
+                    properties           => {
+                        test => { type => 'string', pattern => '\A[^\n]*\S[^\n]*\z' },
+                        map { $_ => entry_of( $PACKAGE_NAME{$_} ) } keys %PACKAGE_NAME,
+                    },
+                    patternProperties => { $PACKAGER => entry_of($ANY_PACKAGE_NAME) },
+                },
+            },
+        },
+        $SOURCES => {
             type                 => 'object',
             additionalProperties => 0,
             properties           => { map { $_ => list_of( $SOURCE{$_} ) } keys %SOURCE },
         },
-        map { $_ => list_of( entry_of( $PACKAGE_NAME{$_} ) ) } keys %PACKAGE_NAME,
     },
-    patternProperties => { $PACKAGER => list_of( entry_of($ANY_PACKAGE_NAME) ) },
 };
-
-our $DOCUMENT_SCHEMA = { type => 'object', properties => { $KEY => $SCHEMA } };
 
 # The mapping of metamerge.yml, or an empty one when there is none.  Dies when the file does not parse.
 my sub document_of ($snapshot) {
@@ -250,35 +292,73 @@ my sub document_of ($snapshot) {
     return Dist::Conformance::Schema::parse_yaml( $text, $FILE );
 }
 
-my sub declaration_of ($document) { return { programs => [], %{ $document->{$KEY} // {} } } }
+my sub declaration_of ($document) { return { packages => $document->{$PACKAGES} // {}, sources => $document->{$SOURCES} // {} } }
 
-my sub count_of ( $count, $noun ) { return "$count $noun" . ( $count == 1 ? q{} : 's' ) }
+# The errors of the schema, or else what it cannot say: that each dependency has a packager, each mapping a
+# package, and that the sources and the entries that name them agree.
+my sub errors_of ($document) {
+    my @errors = Dist::Conformance::Schema::errors( $document, $SCHEMA );
+    return @errors if @errors;
+    my ( $packages, $sources ) = @{ declaration_of($document) }{qw{packages sources}};
+    my %named;
+    for my $dependency ( sort keys %$packages ) {
+        my @packagers = grep { $_ ne 'test' } sort keys %{ $packages->{$dependency} };
+        push @errors, "/$PACKAGES/$dependency: names no packager" if !@packagers;
+        for my $packager ( grep { ref $packages->{$dependency}{$_} } @packagers ) {
+            my $entry = $packages->{$dependency}{$packager};
+            push @errors, "/$PACKAGES/$dependency/$packager: names no package, as name or for a distro" if List::Util::all { $_ eq 'source' } keys %$entry;
+            next if !defined $entry->{source};
+            $named{$packager}{ $entry->{source} } = 1;
+            if ( List::Util::none { $_->{name} eq $entry->{source} } @{ $sources->{$packager} // [] } ) {
+                push @errors, "/$PACKAGES/$dependency/$packager/source: $entry->{source} is not a source in $SOURCES/$packager";
+            }
+        }
+    }
+    for my $packager ( sort keys %$sources ) {
+        my %seen;
+        for my $index ( 0 .. $#{ $sources->{$packager} } ) {
+            my $source = $sources->{$packager}[$index];
+            push @errors, "/$SOURCES/$packager/$index/name: $source->{name} is the name of another source too" if $seen{ $source->{name} }++;
+            push @errors, "/$SOURCES/$packager/$index: no dependency names $source->{name} as its source"      if !$named{$packager}{ $source->{name} };
+        }
+    }
+    return @errors;
+}
+
+my sub count_of ( $count, $one, $many = "${one}s" ) { return "$count " . ( $count == 1 ? $one : $many ) }
 
 =method declared
 
 C<($from)>, a class method.  The validated declaration of a repository, as it
-is written: a hash reference from each packager to an array reference of its
-entries, C<sources> to a hash reference from each packager to an array
-reference of its sources, when there are any, and C<programs> to an array
-reference of the command lines, such as
-C<< { deb => ['ffmpeg', { name => 'libssl3', 'ubuntu/24.04' => 'libssl3t64' }], programs => ['ffmpeg -version'] } >>.
-C<programs> is always there, and empty when the declaration has none.  So a
-repository that declares nothing gives C<< { programs => [] } >>.  L</resolve>
-gives what one host installs.
+is written: a hash reference with C<packages>, the mapping of
+C<x_system_packages>, and C<sources>, the mapping of C<x_system_sources>, such
+as
+
+    {
+        packages => { ffmpeg => { deb => { name => 'ffmpeg', source => 'jellyfin' }, test => 'ffmpeg -version' } },
+        sources  => { deb => [ { name => 'jellyfin', uri => ..., fingerprint => ... } ] },
+    }
+
+A repository that declares nothing gives C<< { packages => {}, sources => {} } >>.
+L</resolve> gives what one host installs.
 
 C<$from> is a L<Dist::Conformance::Snapshot>, such as a
 L<Dist::Conformance::Snapshot::Tree> of a remote repository, or the directory
 of a checkout.  Only F<metamerge.yml> is read.
 
 Dies when F<metamerge.yml> does not parse, and when the declaration is not
-valid.  Then the message starts with C<metamerge.yml is not valid:>, and gives
-each error on a line of its own, as L<Dist::Conformance::Schema/validate> does.
+valid, as L</DESCRIPTION> says.  Then the message starts with
+C<metamerge.yml is not valid:>, and gives each error on a line of its own, as
+L<Dist::Conformance::Schema/validate> does.
 
 =cut
 
 sub declared ( $, $from ) {
     my $snapshot = builtin::blessed($from) && $from->isa('Dist::Conformance::Snapshot') ? $from : Dist::Conformance::Snapshot::Directory->new( root => $from );
-    return declaration_of( Dist::Conformance::Schema::validate( document_of($snapshot), $DOCUMENT_SCHEMA, $FILE ) );
+    my $document = document_of($snapshot);
+    my @errors   = errors_of($document);
+    Dist::Conformance::Schema::refuse( $FILE, @errors ) if @errors;
+    return declaration_of($document);
 }
 
 =method resolve
@@ -303,11 +383,50 @@ The C<VERSION_CODENAME> of F</etc/os-release>, for C<{codename}> in a suite.
 
 =back
 
-Returns a hash reference with three array references: C<packages>, the package
-name of each entry that matches the host, without duplicates and in their
-order; C<sources>, each source of the packager that applies to the host, with
-C<{codename}> filled in and without C<distros>; and C<programs>.  Dies on a
-source that applies and needs a codename that C<%host> does not give.
+Returns a hash reference:
+
+    {
+        needs      => [ { name => 'FooLib', package => 'libfoo-dev', source => undef, test => undef }, ... ],
+        packages   => [ 'libfoo-dev', 'ffmpeg' ],
+        sources    => [ { name => 'jellyfin', suites => ['noble'], ... } ],
+        programs   => [ 'ffmpeg -version' ],
+        unresolved => [ 'BarLib' ],
+    }
+
+=over
+
+=item needs
+
+One item for each dependency that resolves on the host, by the sorted name of
+the dependency, because a YAML mapping has no order.  C<package> is the
+package for the host, or C<undef> when the most specific key is null, so that
+the host needs nothing.  C<source> is the name of its source, and C<test> the
+test of the dependency, or C<undef>.
+
+=item packages
+
+The packages of C<needs>, in their order, without duplicates.
+
+=item sources
+
+The sources that the packages of C<needs> come from, in their order, once
+each, with C<{codename}> filled in and without C<distros>.
+
+=item programs
+
+The tests of C<needs>, in their order.
+
+=item unresolved
+
+The sorted names of the dependencies that do not resolve on the host: those
+without an entry for the packager, those whose entry has no key that matches
+the host, and those whose source is not for the host.  A host must not go on
+without them, so the caller decides what to do, and C<resolve> does not die.
+
+=back
+
+Dies without a packager, and on a source that a package needs and that needs a
+codename that C<%host> does not give.
 
 =cut
 
@@ -316,33 +435,47 @@ sub resolve ( $, $declared, %host ) {
     die "resolve needs a packager\n" if !defined $packager;
     my @keys    = ( ( defined $distro && defined $release ? "$distro/$release" : () ), ( defined $distro ? $distro : () ), 'name' );
     my %on_host = map { $_ => 1 } grep { $_ ne 'name' } @keys;
+    my %source  = map { $_->{name} => $_ } @{ $declared->{sources}{$packager} // [] };
 
-    my @packages;
-    for my $entry ( @{ $declared->{$packager} // [] } ) {
-        if ( !ref $entry ) {
-            push @packages, $entry;
+    my ( @needs, @unresolved );
+    for my $name ( sort keys %{ $declared->{packages} } ) {
+        my $dependency = $declared->{packages}{$name};
+        my $entry      = $dependency->{$packager};
+        my %need       = ( name => $name, package => $entry, source => undef, test => $dependency->{test} );
+        if ( ref $entry ) {
+            my ($key) = grep { exists $entry->{$_} } @keys;
+            $need{package} = defined $key ? $entry->{$key} : undef;
+            $need{source}  = $entry->{source} if defined $need{package};
+            $entry         = undef            if !defined $key;
+        }
+        my $source = defined $need{source} ? $source{ $need{source} } : undef;
+        if ( !defined $entry || ( $source && $source->{distros} && !List::Util::any( sub { $on_host{$_} }, @{ $source->{distros} } ) ) ) {
+            push @unresolved, $name;
             next;
         }
-        my ($key) = grep { defined $entry->{$_} } @keys;
-        push @packages, $entry->{$key} if defined $key;
+        push @needs, \%need;
     }
-    @packages = List::Util::uniq(@packages);
 
     my @sources;
-    for my $source ( @{ $declared->{sources}{$packager} // [] } ) {
-        next if $source->{distros} && !List::Util::any( sub { $on_host{$_} }, @{ $source->{distros} } );
-        my %resolved = %$source;
+    for my $name ( List::Util::uniq( grep { defined } map { $_->{source} } @needs ) ) {
+        my %resolved = %{ $source{$name} };
         delete $resolved{distros};
         $resolved{suites} = [
             map {
                 my $suite = $_;
-                die "The source $source->{name} needs the codename of the host, for the suite $suite\n" if index( $suite, '{codename}' ) >= 0 && !defined $codename;
+                die "The source $name needs the codename of the host, for the suite $suite\n" if index( $suite, '{codename}' ) >= 0 && !defined $codename;
                 $suite =~ s/\{codename\}/$codename/gr;
-            } @{ $source->{suites} }
+            } @{ $resolved{suites} }
         ];
         push @sources, \%resolved;
     }
-    return { packages => \@packages, sources => \@sources, programs => [ @{ $declared->{programs} // [] } ] };
+    return {
+        needs      => \@needs,
+        packages   => [ List::Util::uniq( grep { defined } map { $_->{package} } @needs ) ],
+        sources    => \@sources,
+        programs   => [ grep { defined } map { $_->{test} } @needs ],
+        unresolved => \@unresolved,
+    };
 }
 
 =func os_release
@@ -373,14 +506,12 @@ sub os_release ($text) {
 sub check ( $, $snapshot ) {
     return ( 'pass', "there is no $FILE, so it needs no system packages" ) if !$snapshot->contains($FILE);
     my $document = eval { document_of($snapshot) } // return ( 'fail', Dist::Conformance::Schema::first_line($@) );
-    my @errors   = Dist::Conformance::Schema::errors( $document, $DOCUMENT_SCHEMA );
+    my @errors   = errors_of($document);
     return ( 'fail', "$FILE is not valid: " . join '; ', @errors ) if @errors;
     my $declaration = declaration_of($document);
-    my $programs    = delete $declaration->{programs};
-    my $sources     = delete $declaration->{sources} // {};
-    my @said        = map { count_of( scalar @{ $declaration->{$_} }, "$_ package" ) } sort keys %$declaration;
-    push @said, map { count_of( scalar @{ $sources->{$_} }, "$_ source" ) } sort keys %$sources;
-    push @said, count_of( scalar @$programs, 'program' ) if @$programs;
+    my $sources     = $declaration->{sources};
+    my @said        = ( map { count_of( scalar @{ $sources->{$_} }, "$_ source" ) } sort keys %$sources );
+    unshift @said, count_of( scalar keys %{ $declaration->{packages} }, 'dependency', 'dependencies' ) if %{ $declaration->{packages} };
     return ( 'pass', "$FILE declares no system packages" ) if !@said;
     my $last = pop @said;
     return ( 'pass', "$FILE declares " . ( @said ? join( ', ', @said ) . " and $last" : $last ) );
