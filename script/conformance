@@ -14,12 +14,14 @@ use List::Util();
 use Pod::Usage();
 
 use Dist::Conformance();
+use Dist::Conformance::Check::SystemPackages();
 use Dist::Conformance::Schema();
 
 =head1 SYNOPSIS
 
     conformance check  [--root DIR] [--json] [--offline] [--cache DIR] [--standards DIR]
     conformance update [--root DIR] [--dry-run] [--json] [--offline] [--cache DIR] [--standards DIR]
+    conformance packages [--packager NAME | --programs] [DIR]
     conformance help
 
 =head1 DESCRIPTION
@@ -46,6 +48,23 @@ files that the checks can write, and installs the git hooks.  Prints one line
 for each change, and each thing that only a person can do.  With C<--dry-run>
 it changes nothing, and prints what it would change.  Exits 0 when it ran,
 whatever it left for a person; run C<check> afterwards to see what still fails.
+
+=item packages
+
+Prints the system packages that the checkout in DIR declares in
+F<metamerge.yml>, one name on each line, for the packager C<--packager>,
+default C<deb>.  With C<--programs> it prints the command lines of
+C<programs> instead.  DIR defaults to the current directory.
+L<Dist::Conformance::Check::SystemPackages> says what the declaration holds.
+
+It reads only F<metamerge.yml>: it needs no F<.conformance.yml>, no standards
+and no network, so a script can run it on a host that it provisions, such as:
+
+    apt-get install -y $(conformance packages /bogus/checkout)
+
+It prints nothing else on standard output.  When the checkout declares nothing
+for the packager, it prints nothing and exits 0.  When the declaration is not
+valid, it prints no package, and exits 2 with the errors on standard error.
 
 =item help
 
@@ -106,6 +125,7 @@ C<(@arguments)>.  Runs the program, and returns its exit status.
 
 sub main (@arguments) {
     my $command = shift @arguments // 'help';
+    return report_packages(@arguments) if $command eq 'packages';
     my %options = ( root => q{.} );
     my $parsed  = Getopt::Long::GetOptionsFromArray( \@arguments, \%options, qw{root=s json dry-run offline cache=s standards=s} );
     return show_synopsis(2) if !$parsed || @arguments;
@@ -124,6 +144,30 @@ sub main (@arguments) {
     }
     print {*STDOUT} $output or return 2;
     return $status;
+}
+
+=func report_packages
+
+C<(@arguments)>.  Runs C<packages>, and returns its exit status.
+
+=cut
+
+sub report_packages (@arguments) {
+    my %options = ( packager => 'deb' );
+    my $parsed  = Getopt::Long::GetOptionsFromArray( \@arguments, \%options, qw{packager=s programs} );
+    return show_synopsis(2) if !$parsed || @arguments > 1;
+    my $packager = $options{programs} ? 'programs' : $options{packager};
+    if ( !$options{programs} && !Dist::Conformance::Schema::matches( { pattern => $Dist::Conformance::Check::SystemPackages::PACKAGER }, $packager ) ) {
+        warn "conformance: $packager is not the name of a packager\n";
+        return 2;
+    }
+    my $declared = eval { Dist::Conformance::Check::SystemPackages->declared( $arguments[0] // q{.} ) };
+    if ( !defined $declared ) {
+        warn "conformance: $@";
+        return 2;
+    }
+    print {*STDOUT} map { "$_\n" } @{ $declared->{$packager} // [] } or return 2;
+    return 0;
 }
 
 =func report_check

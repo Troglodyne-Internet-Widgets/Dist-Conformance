@@ -4,6 +4,7 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Test2::V0;
 use Capture::Tiny();
+use Cwd();
 use FindBin();
 use FindBin::libs;
 
@@ -92,6 +93,34 @@ subtest 'errors' => sub {
     is( run_main(qw{check --bogus})->{status}, 2, 'and so does an unknown option' );
     is( run_main(qw{check extra})->{status},   2, 'and an extra argument' );
     like( run_main('nonsense')->{err}, qr/Usage:/, 'with the usage on standard error' );
+};
+
+subtest 'packages' => sub {
+    my $root = Fixture::checkout( 'metamerge.yml' => "x_system_packages:\n  deb: [ffmpeg, libmagic-dev]\n  rpm: [ffmpeg-free]\n  programs: ['ffmpeg -version', 'file --version']\n" );
+    is( run_main( 'packages',                  $root ),        { out => "ffmpeg\nlibmagic-dev\n", err => q{}, status => 0 }, 'the deb packages, one per line, and nothing else' );
+    is( run_main( qw{packages --packager rpm}, $root )->{out}, "ffmpeg-free\n",                                              'or those of another packager' );
+    is( run_main( qw{packages --packager pkg}, $root ),        { out => q{}, err => q{}, status => 0 },                      'a packager that the declaration does not name has none' );
+    is( run_main( qw{packages --programs},     $root )->{out}, "ffmpeg -version\nfile --version\n",                          'and the programs, with --programs' );
+
+    my $cwd = Cwd::getcwd();
+    chdir $root or die "Cannot chdir to $root: $!";
+    my $here = run_main('packages');
+    chdir $cwd or die "Cannot chdir to $cwd: $!";
+    is( $here->{out}, "ffmpeg\nlibmagic-dev\n", 'the directory defaults to the current one' );
+
+    is( run_main( 'packages',              Fixture::checkout() ),                                                          { out => q{}, err => q{}, status => 0 }, 'no declaration prints nothing, and exits 0' );
+    is( run_main( qw{packages --programs}, Fixture::checkout( 'metamerge.yml' => "x_system_packages: { deb: [xz] }\n" ) ), { out => q{}, err => q{}, status => 0 }, 'and no programs prints none' );
+
+    my $bad = run_main( 'packages', Fixture::checkout( 'metamerge.yml' => "x_system_packages:\n  deb: [ffmpeg-]\n" ) );
+    is( $bad->{status}, 2,   'an invalid declaration exits 2' );
+    is( $bad->{out},    q{}, 'and prints no package' );
+    like( $bad->{err}, qr{\Aconformance:\ \S+\ is\ not\ valid:\n\ \ /x_\w+/deb/0:}, 'and says why on standard error' );
+
+    my $packager = run_main( qw{packages --packager ../deb}, $root );
+    is( $packager->{status}, 2, 'a packager that is not a name exits 2' );
+    like( $packager->{err}, qr{\Aconformance:\ [.][.]/deb\ is\ not\ the\ name}, 'and says so' );
+    is( run_main( 'packages', $root, $root )->{status}, 2, 'and so does a second directory' );
+    is( run_main( qw{packages --bogus}, $root )->{status}, 2, 'and an unknown option' );
 };
 
 subtest 'help' => sub {
