@@ -219,13 +219,23 @@ our $HOST = '\A[a-z0-9._-]+(?:/[a-z0-9._-]+)?\z';
 
 my sub list_of ($item) { return { type => 'array', minItems => 1, items => $item } }
 
+# The keywords of a mapping that must have a key other than $key, which refuse it with $message.
+my sub more_than ( $key, $message ) {
+    return (
+        minProperties    => 1,
+        not              => { required      => [$key],   maxProperties => 1 },
+        'x-errorMessage' => { minProperties => $message, not           => $message },
+    );
+}
+
 my sub entry_of ($pattern) {
     my $name = { type => 'string', pattern => $pattern };
     return {
         anyOf => [
             $name,
             {
-                type                 => 'object',
+                type => 'object',
+                more_than( source => 'names no package, as name or for a distro' ),
                 additionalProperties => 0,
                 properties           => { name => $name, source => { type => 'string', pattern => $SOURCE_NAME } },
                 patternProperties    => { '(?!(?:name|source)\z)' . $HOST => { %$name, nullable => 1 } },
@@ -268,13 +278,14 @@ our $SCHEMA = {
             additionalProperties => 0,
             patternProperties    => {
                 $DEPENDENCY => {
-                    type                 => 'object',
+                    type => 'object',
+                    more_than( test => 'names no packager' ),
                     additionalProperties => 0,
                     properties           => {
                         test => { type => 'string', pattern => '\A[^\n]*\S[^\n]*\z' },
                         map { $_ => entry_of( $PACKAGE_NAME{$_} ) } keys %PACKAGE_NAME,
                     },
-                    patternProperties => { $PACKAGER => entry_of($ANY_PACKAGE_NAME) },
+                    patternProperties => { '(?!(?:' . join( q{|}, sort keys %PACKAGE_NAME ) . ')\z)' . $PACKAGER => entry_of($ANY_PACKAGE_NAME) },
                 },
             },
         },
@@ -294,8 +305,8 @@ my sub document_of ($snapshot) {
 
 my sub declaration_of ($document) { return { packages => $document->{$PACKAGES} // {}, sources => $document->{$SOURCES} // {} } }
 
-# The errors of the schema, or else what it cannot say: that each dependency has a packager, each mapping a
-# package, and that the sources and the entries that name them agree.
+# The errors of the schema, or else what it cannot say, because it compares one part of the document with
+# another: that the sources and the entries that name them agree.
 my sub errors_of ($document) {
     my @errors = Dist::Conformance::Schema::errors( $document, $SCHEMA );
     return @errors if @errors;
@@ -303,10 +314,8 @@ my sub errors_of ($document) {
     my %named;
     for my $dependency ( sort keys %$packages ) {
         my @packagers = grep { $_ ne 'test' } sort keys %{ $packages->{$dependency} };
-        push @errors, "/$PACKAGES/$dependency: names no packager" if !@packagers;
         for my $packager ( grep { ref $packages->{$dependency}{$_} } @packagers ) {
             my $entry = $packages->{$dependency}{$packager};
-            push @errors, "/$PACKAGES/$dependency/$packager: names no package, as name or for a distro" if List::Util::all { $_ eq 'source' } keys %$entry;
             next if !defined $entry->{source};
             $named{$packager}{ $entry->{source} } = 1;
             if ( List::Util::none { $_->{name} eq $entry->{source} } @{ $sources->{$packager} // [] } ) {

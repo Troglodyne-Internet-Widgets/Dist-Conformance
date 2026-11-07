@@ -139,8 +139,10 @@ subtest tests => sub {
 subtest entries => sub {
     is( dependency_refusal("    deb: { name: libssl3, ubuntu/24.04: libssl3t64, debian: libbar, debian/13: ~ }\n"), q{}, 'an entry can name a package by default, for a distro, or for a release, or none' );
     is( dependency_refusal("    deb: { ubuntu/24.04: libfoo-t64 }\n"),                                              q{}, 'and need not have a default' );
-    like( dependency_refusal("    deb: {}\n"),                                                                qr{/Dep/deb:\ names\ no\ package},                              'a mapping without a key is refused' );
-    like( dependency_refusal("    deb: { source: jellyfin }\nx_system_sources:\n  deb:\n$SOURCE"),            qr{/Dep/deb:\ names\ no\ package},                              'and so is one with a source and no package' );
+    like( dependency_refusal("    deb: {}\n"),                                                     qr{/Dep/deb:.*names\ no\ package}, 'a mapping without a key is refused' );
+    like( dependency_refusal("    deb: { source: jellyfin }\nx_system_sources:\n  deb:\n$SOURCE"), qr{/Dep/deb:.*names\ no\ package}, 'and so is one with a source and no package' );
+    my @lines = split /\n/, dependency_refusal("    deb: { Ubuntu: libfoo }\n");
+    is( scalar( grep { /Properties\ not\ allowed/ } @lines ), 1, 'and each error of an entry of a packager with its own rule is reported once, not again under the generic rule' ) or diag join "\n", @lines;
     like( dependency_refusal("    deb: { Ubuntu: libfoo }\n"),                                                qr{/Dep/deb:.*Properties\ not\ allowed:\ Ubuntu},               'and a key that is not a distro' );
     like( dependency_refusal("    deb: { 'ubuntu/24 04': libfoo }\n"),                                        qr{/Dep/deb:.*Properties\ not\ allowed},                        'or a release' );
     like( dependency_refusal("    deb: { ubuntu/24.04/x: libfoo }\n"),                                        qr{/Dep/deb:.*Properties\ not\ allowed},                        'and a key has one / at most' );
