@@ -60,6 +60,10 @@ subtest validate => sub {
     );
 };
 
+subtest refuse => sub {
+    is( dies { Dist::Conformance::Schema::refuse( 'f.yml', '/a: is wrong', '/b: too' ) }, "f.yml is not valid:\n  /a: is wrong\n  /b: too\n", 'each error on a line of its own, under the file' );
+};
+
 subtest matches => sub {
     ok( Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME,  'troglodyne-5.040' ), 'a name matches' );
     ok( !Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, 'a/b' ),              'a path is not a name' );

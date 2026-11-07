@@ -172,7 +172,7 @@ sub skipped ($self) {
     );
     if (@wrong) {
         my $name = $flavor->name;
-        die join( "\n", "$Dist::Conformance::Config::FILE is not valid:", map { "  $_: names a check that the flavor $name does not run" } @wrong ), "\n";
+        Dist::Conformance::Schema::refuse( $Dist::Conformance::Config::FILE, map { "$_: names a check that the flavor $name does not run" } @wrong );
     }
     return { map { $_ => 1 } @{ $config->{skip} } };
 }
