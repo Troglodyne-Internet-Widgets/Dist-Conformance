@@ -4,3 +4,5 @@
 runtime:
   requires:
     perl: '5.040'
+    # x-errorMessage, which the schema of SystemPackages uses.
+    JSON::Validator::Schema::Troglodyne: '1.001'

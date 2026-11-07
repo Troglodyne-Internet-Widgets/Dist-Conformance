@@ -143,6 +143,10 @@ F<.claude/settings.json> enables the plugins.
 
 The CI workflows exist.
 
+=item L<Dist::Conformance::Check::SystemPackages>
+
+The system packages and archives that F<metamerge.yml> declares are valid.
+
 =back
 
 =head1 WRITING A CHECK
