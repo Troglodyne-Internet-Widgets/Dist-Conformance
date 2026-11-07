@@ -1,6 +1,6 @@
 Revision history for Dist-Conformance
 
-0.003
+0.003 2026-11-06 TEODESIAN
     - DataSchema reads an INI file, such as dist.ini, as a hash of its
       sections by their whole header.  A key that a section repeats is the
       list of its values, as Dist::Zilla reads it.  A file whose name ends in
