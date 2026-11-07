@@ -1,5 +1,13 @@
 Revision history for Dist-Conformance
 
+0.003
+    - DataSchema reads an INI file, such as dist.ini, as a hash of its
+      sections by their whole header.  A key that a section repeats is the
+      list of its values, as Dist::Zilla reads it.  A file whose name ends in
+      .ini is read so by default, and format: ini says it for any other.
+      So a flavor can refuse a key of a plugin, such as user under
+      [GithubMeta].
+
 0.002 2026-11-04 TEODESIAN
     - CriticProfile compares the policies of the profile with those of its
       template, and fails with the name of each policy that the template
