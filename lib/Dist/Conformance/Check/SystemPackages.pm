@@ -7,6 +7,7 @@ use warnings FATAL => 'all';
 use re '/aasx';
 use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
+use Lingua::EN::Inflect();
 use List::Util();
 
 use Dist::Conformance::Schema();
@@ -334,8 +335,6 @@ my sub errors_of ($document) {
     return @errors;
 }
 
-my sub count_of ( $count, $one, $many = "${one}s" ) { return "$count " . ( $count == 1 ? $one : $many ) }
-
 =method declared
 
 C<($from)>, a class method.  The validated declaration of a repository, as it
@@ -519,8 +518,8 @@ sub check ( $, $snapshot ) {
     return ( 'fail', "$FILE is not valid: " . join '; ', @errors ) if @errors;
     my $declaration = declaration_of($document);
     my $sources     = $declaration->{sources};
-    my @said        = ( map { count_of( scalar @{ $sources->{$_} }, "$_ source" ) } sort keys %$sources );
-    unshift @said, count_of( scalar keys %{ $declaration->{packages} }, 'dependency', 'dependencies' ) if %{ $declaration->{packages} };
+    my @said        = ( map { Lingua::EN::Inflect::NO( "$_ source", scalar @{ $sources->{$_} } ) } sort keys %$sources );
+    unshift @said, Lingua::EN::Inflect::NO( 'dependency', scalar keys %{ $declaration->{packages} } ) if %{ $declaration->{packages} };
     return ( 'pass', "$FILE declares no system packages" ) if !@said;
     my $last = pop @said;
     return ( 'pass', "$FILE declares " . ( @said ? join( ', ', @said ) . " and $last" : $last ) );
