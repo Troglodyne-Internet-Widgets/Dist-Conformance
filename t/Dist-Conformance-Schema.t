@@ -21,6 +21,17 @@ subtest parse_json => sub {
     like( dies { Dist::Conformance::Schema::parse_json( '[1]',   'f.json' ) }, qr/\Af[.]json\ does\ not\ hold\ an\ object/,     'an array is not an object' );
 };
 
+subtest parse_ini => sub {
+    my $ini = "name = Foo\n[Run::Test]\nrun = a\nrun = b\n[GithubMeta]\nissues = 1\n[Git::Commit / Release]\nallow_dirty = Changes\n";
+    is(
+        Dist::Conformance::Schema::parse_ini( $ini, 'dist.ini' ),
+        { _ => { name => 'Foo' }, 'Run::Test' => { run => [qw{a b}] }, GithubMeta => { issues => 1 }, 'Git::Commit / Release' => { allow_dirty => 'Changes' } },
+        'a hash of sections, with the keys before the first in _, and each repeated key as a list of its values in order'
+    );
+    is( Dist::Conformance::Schema::parse_ini( "[A]\nx = 1\n[B]\n[A]\nx = 2\n", 'f.ini' ), { A => { x => [ 1, 2 ] }, B => {} }, 'a key repeated in a section that comes twice is a list too' );
+    like( dies { Dist::Conformance::Schema::parse_ini( "[A\n", 'f.ini' ) }, qr/\Af[.]ini\ does\ not\ parse\ as\ INI:\ \S/, 'a syntax error names the file' );
+};
+
 subtest encode_json => sub {
     is( Dist::Conformance::Schema::encode_json( { b => 1, a => { c => [] } } ), qq{{\n  "a": {\n    "c": []\n  },\n  "b": 1\n}\n}, 'sorted, indented by two, with a final newline' );
 };

@@ -1,6 +1,6 @@
 package Dist::Conformance::Schema;
 
-# ABSTRACT: Parse YAML and JSON, and validate the result against a schema
+# ABSTRACT: Parse YAML, JSON and INI, and validate the result against a schema
 
 use 5.040;
 use warnings FATAL => 'all';
@@ -178,6 +178,23 @@ sub relative_path ( $path, $inside ) {
     return $path;
 }
 
+=func parse_ini
+
+C<($text, $where)>.  The same as L</parse_yaml>, for an INI file such as
+F<dist.ini>.  Returns a hash of sections by their whole header, such as
+C<GithubMeta> or C<Git::Commit / Release>, each a hash of its keys.  The keys
+before the first header are in the section C<_>.  A key that a section gives
+more than once, such as C<run> in C<[Run::Test]>, has the list of its values,
+in order, as Dist::Zilla reads it.  Any other key has its value.
+
+=cut
+
+sub parse_ini ( $text, $where ) {
+    my $data = eval { Dist::Conformance::Schema::INIReader->read_string($text) };
+    die( "$where does not parse as INI: " . first_line($@), "\n" ) if !defined $data;
+    return $data;
+}
+
 =func first_line
 
 C<($text)>.  The first line of an error from other code, without the "at FILE
@@ -192,6 +209,17 @@ sub first_line ($text) {
     $line //= q{};
     $line =~ s/\ at\ \S+\ line\ \d+[.]?\z//;
     return $line;
+}
+
+# Config::INI::Reader keeps the last value of a repeated key, so it collects each repeat into a list.
+package Dist::Conformance::Schema::INIReader {
+    use parent 'Config::INI::Reader';
+
+    sub set_value ( $self, $name, $value ) {
+        my $values = $self->{ __PACKAGE__ . '/values' }{ $self->current_section }{$name} //= [];
+        push @$values, $value;
+        return $self->SUPER::set_value( $name, @$values == 1 ? $value : [@$values] );
+    }
 }
 
 =head1 SEE ALSO
