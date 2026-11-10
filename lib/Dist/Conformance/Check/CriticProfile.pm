@@ -59,8 +59,12 @@ is current.
 
 The update writes the template when the file is missing.  A profile that is
 there usually has changes of its own, such as exemptions, so it is replaced
-only when C<replace> is true; otherwise the update names the policies to add
-by hand.
+only when C<replace> is true.  Otherwise the update appends to the end of the
+file each policy that it lacks, as the template writes its section: the
+C<[Name]> line and the parameters below it, without the comments.  Every line
+that the file had stays as it was.  A profile that does not parse is left for a
+person, and so is one whose template still has a placeholder that nothing
+fills.
 
 =head1 CONFIGURATION
 
@@ -115,10 +119,22 @@ sub policies ( $text, $where ) {
     my $profile = Config::Tiny->read_string($text) // die( "$where does not parse as a perlcritic profile: " . Config::Tiny->errstr . "\n" );
     my %policies;
     for my $section ( grep { $_ ne q{_} } keys %$profile ) {
-        my ( $off, $name ) = $section =~ m/\A(-?)(?:Perl::Critic::Policy::)?(.+)\z/;
+        my ( $off, $name ) = policy_of($section);
         $policies{$name} = $off ? 'disabled' : 'enabled';
     }
     return \%policies;
+}
+
+=func policy_of
+
+C<($section)>.  Whether the header C<$section> of a profile turns its policy
+off, and the short name of the policy.
+
+=cut
+
+sub policy_of ($section) {
+    my ( $off, $name ) = $section =~ m/\A(-?)(?:Perl::Critic::Policy::)?(.+)\z/;
+    return ( !!$off, $name );
 }
 
 =method missing_policies
@@ -150,23 +166,52 @@ sub lacks (@missing) {
 =method verdict
 
 C<($text)>.  The status and the detail of the profile C<$text>, as C<check>
-returns them, and for a failure, what a person must do to fix it by hand.
+returns them.  For a profile that does not parse, then what a person must do
+to fix it by hand; for one that lacks policies, then C<undef> and their
+names.
 
 =cut
 
 sub verdict ( $self, $text ) {
-    my ( $file, $template ) = @{ $self->config }{qw{file template}};
-    my @missing = eval { $self->missing_policies($text) };
+    my $template = $self->config->{template};
+    my @missing  = eval { $self->missing_policies($text) };
     if ($@) {
         my $detail = Dist::Conformance::Schema::first_line($@);
         return ( 'fail', $detail, "$detail: fix it by hand, or set replace: true to overwrite it" );
     }
     return ( 'pass', "has every policy of $template" ) if !@missing;
-    my $detail = lacks(@missing) . " of $template";
-    return ( 'fail', $detail, "$file $detail: add each one to it by hand, or add it as [-Name] to turn it off on purpose, or set replace: true to overwrite it" );
+    return ( 'fail', lacks(@missing) . " of $template", undef, @missing );
+}
+
+=func sections
+
+C<($text)>.  The text of each section of the profile C<$text> that enables a
+policy, as a hash reference from the short name of the policy: the line of the
+section and the lines of its parameters, each with its newline, without the
+comments and the blank lines.  The lines are found as L<Config::Tiny> finds
+them, so the names are the names of L</policies>.
+
+=cut
+
+sub sections ($text) {
+    my ( %sections, $name );
+    for my $line ( split /^/, $text ) {
+        if ( my ($section) = $line =~ s/\s;\s.+$//r =~ m/\A\s*\[\s*(.+?)\s*\]\s*$/ ) {
+            my ( $off, $policy ) = policy_of($section);
+            $name = $off ? undef : $policy;
+            $sections{$name} = q{} if defined $name;
+            next;
+        }
+        next if !defined $name || $line =~ m/\A\s*(?:[\#;]|$)/;
+        $sections{$name} .= $line =~ s/\n?\z/\n/r;
+    }
+    return { map { $_ => "[$_]\n$sections{$_}" } keys %sections };
 }
 
 =method check
+
+C<($snapshot)>.  The status and the detail that L</DESCRIPTION> says, for the
+profile in C<$snapshot>.
 
 =cut
 
@@ -180,7 +225,8 @@ sub check ( $self, $snapshot ) {
 =method update
 
 Writes the template when the profile is missing, or when it is not current and
-C<replace> is true.  Otherwise names what to add by hand.
+C<replace> is true.  Otherwise appends the sections of the template that the
+profile lacks, as L</DESCRIPTION> says.
 
 =cut
 
@@ -188,11 +234,35 @@ sub update ( $self, $update ) {
     my ( $file, $template ) = @{ $self->config }{qw{file template}};
     my $text = $update->snapshot->content($file);
     if ( defined $text ) {
-        my ( $status, undef, $by_hand ) = $self->verdict($text);
-        return                            if $status eq 'pass';
-        return $update->by_hand($by_hand) if !$self->config->{replace};
+        my ( $status, undef, $by_hand, @missing ) = $self->verdict($text);
+        return if $status eq 'pass';
+        if ( !$self->config->{replace} ) {
+            return $self->append_policies( $update, $text, @missing ) if @missing;
+            return $update->by_hand($by_hand);
+        }
     }
     $self->write_template( $update, $file, $template );
+    return;
+}
+
+=method append_policies
+
+C<($update, $text, @missing)>.  Appends the section of the template of each
+policy of C<@missing> to the profile C<$text>, through C<$update>.  When the
+template still has a placeholder, writes nothing and records what is needed.
+
+=cut
+
+sub append_policies ( $self, $update, $text, @missing ) {
+    my ( $file,     $template ) = @{ $self->config }{qw{file template}};
+    my ( $policies, @unfilled ) = $self->template($template);
+    if (@unfilled) {
+        $update->by_hand( 'Add the policies ' . join( ', ', @missing ) . " of $template to $file by hand, or set the variables " . join( ', ', @unfilled ) . ' in .conformance.yml: nothing sets them' );
+        return;
+    }
+    my $sections = sections($policies);
+    $text .= "\n" if $text =~ m/[^\n]\z/;
+    $update->write( $file, $text . join q{}, @{$sections}{@missing} );
     return;
 }
 

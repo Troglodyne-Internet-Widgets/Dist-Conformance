@@ -1,5 +1,11 @@
 Revision history for Dist-Conformance
 
+0.004
+    - The update of CriticProfile appends to a profile that is there each
+      policy of the template that it lacks, as the template writes its
+      section, and leaves every line of the profile as it was.  It used to
+      leave them for a person, unless replace: true overwrote the profile.
+
 0.003 2026-11-06 TEODESIAN
     - DataSchema reads an INI file, such as dist.ini, as a hash of its
       sections by their whole header.  A key that a section repeats is the
