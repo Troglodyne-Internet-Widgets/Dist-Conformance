@@ -133,7 +133,12 @@ A distribution has the files that its build needs.
 
 =item L<Dist::Conformance::Check::DataSchema>
 
-A JSON or YAML file, such as F<.perl-slop.json>, matches a schema.
+A JSON, YAML or INI file, such as F<.perl-slop.json>, matches a schema.
+
+=item L<Dist::Conformance::Check::RefusedIniKeys>
+
+An INI file, such as F<dist.ini>, sets no key that the flavor refuses, and the
+update removes each one.
 
 =item L<Dist::Conformance::Check::ClaudeSettings>
 
