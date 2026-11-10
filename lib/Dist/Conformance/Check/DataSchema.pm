@@ -53,6 +53,10 @@ a key of a plugin:
                   x-errorMessage:
                     not: overrides the account in the URL of the origin remote
 
+The update cannot remove such a key, because a schema says what is wrong and
+not how to fix it.  L<Dist::Conformance::Check::RefusedIniKeys> refuses a key
+of a plugin and removes it.
+
 The schema is in the flavor, so that it changes in the same commit as the
 standards that describe the file.  It is an OpenAPI v3 schema, as
 L<Dist::Conformance::Schema> describes.
