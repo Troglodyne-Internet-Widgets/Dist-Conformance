@@ -4,7 +4,7 @@ Dist::Conformance - Whether the development harness of a repository conforms to 
 
 # VERSION
 
-version 0.003
+version 0.004
 
 # SYNOPSIS
 
@@ -186,6 +186,7 @@ Current Maintainers:
 # CONTRIBUTORS
 
 - troglodyne-bot <morpheus@troglodyne.net>
+- troglodyne-bot <troglodyne-bot@users.noreply.github.com>
 - troglodyne-robot <trogbot@troglodyne.net>
 
 # COPYRIGHT AND LICENSE
