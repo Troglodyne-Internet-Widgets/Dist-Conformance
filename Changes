@@ -1,6 +1,6 @@
 Revision history for Dist-Conformance
 
-0.005
+0.005 2026-11-11 TEODESIAN
     - CriticProfile takes retired: a list of the policies that the
       standards have taken back.  The check fails a profile that still
       enables one, and names it, and the update removes its section, with
