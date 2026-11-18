@@ -34,8 +34,13 @@ SHAs, so it reads no hook from a remote snapshot.
 
 The update writes each missing hook from its template, executable.  It
 overwrites a hook that differs only when C<replace> is true.  Then, when
-C<install> is true, it installs each hook into F<.git/hooks> of the checkout,
-or of the main checkout of a worktree, unless the installed hook is the same.
+C<install> is true, it installs each hook into the directory that git runs the
+hooks of the checkout from, unless the installed hook is the same.  That is
+F<.git/hooks> of the checkout, or of the main checkout of a worktree, unless
+C<core.hooksPath> names another directory, as L<Dist::Conformance::Snapshot::Directory/hooks_dir>
+says.  A C<core.hooksPath> of C<directory> itself, relative, makes git run each
+hook where the repository tracks it, so there is nothing to install, and each
+worktree runs the hooks of its own branch.
 The check cannot see F<.git/hooks>, so a clone that never installed them passes
 the check and still gets them from the update.
 
