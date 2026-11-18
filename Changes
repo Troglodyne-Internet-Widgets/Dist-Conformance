@@ -1,6 +1,6 @@
 Revision history for Dist-Conformance
 
-0.006
+0.006 2026-11-17 TEODESIAN
     - The update of GitHooks installs each hook where git runs it from,
       as git rev-parse --git-path hooks says, so it honors
       core.hooksPath.  Before, it always wrote into the hooks directory of
