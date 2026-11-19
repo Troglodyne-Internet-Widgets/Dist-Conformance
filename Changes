@@ -1,5 +1,13 @@
 Revision history for Dist-Conformance
 
+{{$NEXT}}
+    - A module name in a flavor must be ASCII.  JSON::Validator compiled
+      the old pattern outside the /a flag of the source file, so \w matched
+      any Unicode letter.  A name such as Foo::Bär passed, and then failed
+      with "does not load".  The pattern is now the rule of
+      Module::Runtime, which spells out its character classes.  Such a name
+      now fails with "is not the name of a module".
+
 0.006 2026-11-17 TEODESIAN
     - The update of GitHooks installs each hook where git runs it from,
       as git rev-parse --git-path hooks says, so it honors

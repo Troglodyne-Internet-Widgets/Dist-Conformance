@@ -8,6 +8,7 @@ use re '/aasx';
 use Mojo::Base -base, -signatures;
 
 use List::Util();
+use Module::Runtime();
 
 use Dist::Conformance::Schema();
 
@@ -215,7 +216,7 @@ has config => sub { {} };
 has 'source';
 has variables => sub { {} };
 
-our $MODULE = { type => 'string', pattern => '\A[A-Za-z_]\w*(?:::\w+)*\z' };
+our $MODULE = { type => 'string', pattern => "\\A$Module::Runtime::module_name_rx\\z" };
 
 =method config_schema
 
