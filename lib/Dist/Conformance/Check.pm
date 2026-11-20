@@ -117,8 +117,7 @@ F<CLAUDE.md> exists and names the skills that it must.
 
 =item L<Dist::Conformance::Check::CriticProfile>
 
-The perlcritic profile enables or turns off every policy that its template
-enables, and enables none that the standards retired.
+The perlcritic profile is its template, with the overrides of the repository.
 
 =item L<Dist::Conformance::Check::ToolConfiguration>
 
@@ -289,6 +288,19 @@ sub update ( $self, $update ) {
     $update->by_hand( "$detail: " . $self->name . ' has no automatic fix' ) if $status eq 'fail';
     return;
 }
+
+=method adopt
+
+C<($snapshot)>.  The configuration that would make this check accept the
+repository in C<$snapshot> as it is now, as a hash reference of the keys of
+this check for F<.conformance.yml>, or nothing.  C<conformance adopt> prints
+it, so that a person can record the choices of a repository before an update
+replaces them.  The default is nothing: a check whose configuration has no
+room for the choices of a repository has nothing to adopt.
+
+=cut
+
+sub adopt ( $, $ ) { return }
 
 =method template
 

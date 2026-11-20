@@ -92,7 +92,6 @@ This is F<troglodyne-5.040.yml> from the fixtures of this distribution:
       CriticProfile:
         file: .perlcriticrc
         template: templates/perlcriticrc
-        replace: false
 
 And this is a flavor that differs for a reason other than the perl: a service,
 which is deployed and not released to CPAN.  It runs the 5.040 standards and
