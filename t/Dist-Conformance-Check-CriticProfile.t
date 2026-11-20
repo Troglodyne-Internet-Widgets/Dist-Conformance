@@ -73,6 +73,8 @@ subtest expected => sub {
         "${HEADER}severity = 3\ntheme = core\n[RegularExpressions::RequireDefault]\nstrict = 1\n[Variables::ProhibitReusedNames]\n[-Subroutines::ProhibitSubroutinePrototypes]\n\n# The overrides of .conformance.yml\n[A::Mine]\n[-Not::Installed]\n[Z::Mine]\nmax = 3\n",
         'a policy that the template does not name goes at the end, sorted, and the settings change in place'
     );
+    is( profile( overrides => { ProhibitReusedNames => { allow => 'x' } } )->expected, "${HEADER}severity = 1\n[RegularExpressions::RequireDefault]\nstrict = 1\n[Variables::ProhibitReusedNames]\nallow = x\n[-Subroutines::ProhibitSubroutinePrototypes]\n", 'an override by the short name of a policy of the template changes that policy' );
+    is( dies { profile( overrides => { ProhibitReusedNames => 'off', 'Variables::ProhibitReusedNames' => {} } )->expected }, "overrides names the policy Variables::ProhibitReusedNames twice\n", 'so its short and its full name are one policy twice' );
     is( with_template( "[A::B]\nk = v" )->expected, "[A::B]\nk = v\n", 'a template without a newline at its end gets one' );
     is( dies { with_template( "[A::B]\nmax = {{MAX}}\n" )->expected }, "perlcriticrc needs the variables MAX in .conformance.yml: nothing sets them\n", 'a placeholder that nothing fills dies, naming it' );
     is( dies { profile( overrides => { '-A::B' => 'off' } )->expected },               "overrides names -A::B, which is not the name of a policy\n", 'an override named as a section that turns a policy off is refused' );
@@ -146,6 +148,15 @@ subtest update => sub {
     is( Fixture::tree_of($dry),                             $before,                                              'and changes nothing on disk' );
 };
 
+subtest full_name => sub {
+    my $full_name = \&Dist::Conformance::Check::CriticProfile::full_name;
+    my %policies  = map { $_ => 1 } qw{Plicease::ProhibitLeadingZeros A::Twice B::Twice Exact};
+    is( $full_name->( 'ProhibitLeadingZeros', \%policies ), 'Plicease::ProhibitLeadingZeros', 'the one name that ends with it' );
+    is( $full_name->( 'Exact',                \%policies ), 'Exact',                          'a name that is there is itself' );
+    is( $full_name->( 'Twice',                \%policies ), 'Twice',                          'and so is one that two names end with' );
+    is( $full_name->( 'LeadingZeros',         \%policies ), 'LeadingZeros',                   'and one that ends only part of a name' );
+};
+
 subtest adopt => sub {
     is( profile()->adopt( snapshot( Fixture::checkout() ) ),        undef, 'nothing for a missing profile' );
     is( profile()->adopt( snapshot( checkout_with($TEMPLATE) ) ),   undef, 'nor for the template' );
@@ -166,6 +177,9 @@ subtest adopt => sub {
         },
         'each departure: a changed and a removed parameter, a policy that the template turns off, one of its own, one turned off, and a setting; not the policy that it lacks'
     );
+    my $short = profile()->adopt( snapshot( checkout_with("[ProhibitReusedNames]\nallow = \$self\n") ) );
+    is( $short->{overrides}, { 'Variables::ProhibitReusedNames' => { allow => '$self' } }, 'a policy named by its short name is adopted by the name of the template' );
+
     my $kept = profile(%$adopted);
     is( [ $kept->check( snapshot($root) ) ], [ 'fail', 'lacks the policy Variables::ProhibitReusedNames, which conformance update corrects' ], 'with what it adopts, the profile differs only by the policy that the template gained' );
     Fixture::run_update( $kept, $root );

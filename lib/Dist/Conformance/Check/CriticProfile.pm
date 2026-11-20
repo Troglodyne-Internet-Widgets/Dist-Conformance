@@ -42,7 +42,9 @@ comments of the profile are those of the template.  A note about an override
 goes in F<.conformance.yml>, beside it.
 
 Each entry of C<overrides> names a policy, with or without the prefix
-C<Perl::Critic::Policy::>, and says one of these:
+C<Perl::Critic::Policy::>, and says one of these.  A name that is the last
+parts of a name in the template, such as C<ProhibitLeadingZeros> for
+C<Plicease::ProhibitLeadingZeros>, is that policy, as Perl::Critic reads it.
 
 =over
 
@@ -265,8 +267,15 @@ sub expected ($self) {
     my $template = $self->config->{template};
     my ( $text, @unfilled ) = $self->template($template);
     die( "$template needs the variables " . join( ', ', @unfilled ) . " in .conformance.yml: nothing sets them\n" ) if @unfilled;
-    profile_of( $text, $template );
-    my $overrides = $self->overrides;
+    my $standard = profile_of( $text, $template )->{policies};
+    my $given = $self->overrides;
+    my %overrides;
+    for my $as ( sort keys %$given ) {
+        my $name = full_name( $as, $standard );
+        die "overrides names the policy $name twice\n" if exists $overrides{$name};
+        $overrides{$name} = $given->{$as};
+    }
+    my $overrides = \%overrides;
 
     $text .= "\n" if $text =~ m/[^\n]\z/;
     my @lines   = split /^/, $text;
@@ -375,7 +384,11 @@ C<($snapshot)>.  The C<overrides> and C<settings> that make L</expected> read
 as the profile in C<$snapshot> reads now, as a hash reference with the keys
 that hold something.  Nothing when the profile is missing, or needs neither.
 A policy that the template names and the profile lacks is not adopted: the
-profile lacked it because the template gained it later.  Dies when either does
+profile lacked it because the template gained it later.  A policy that the
+profile names by the last parts of a name that the template gives in full,
+such as C<ProhibitLeadingZeros> for C<Plicease::ProhibitLeadingZeros>, is the
+policy of the template, as Perl::Critic reads it, and is adopted by the full
+name.  Dies when either does
 not parse, and when a placeholder has no variable.
 
 =cut
@@ -389,8 +402,9 @@ sub adopt ( $self, $snapshot ) {
     my $want = profile_of( $filled, $template );
 
     my %overrides;
-    for my $name ( sort keys %{ $have->{policies} } ) {
-        my $mine     = $have->{policies}{$name};
+    for my $given ( sort keys %{ $have->{policies} } ) {
+        my $mine     = $have->{policies}{$given};
+        my $name     = full_name( $given, $want->{policies} );
         my $standard = $want->{policies}{$name};
         if ( $mine->{off} ) {
             $overrides{$name} = 'off' if !$standard || !$standard->{off};
@@ -406,6 +420,20 @@ sub adopt ( $self, $snapshot ) {
     my $settings = overlay( $want->{settings}, $have->{settings} );
     my %adopted  = ( %overrides ? ( overrides => \%overrides ) : (), %$settings ? ( settings => $settings ) : () );
     return %adopted ? \%adopted : undef;
+}
+
+=func full_name
+
+C<($name, \%policies)>.  The name in C<%policies> that ends with C<::$name>,
+when C<$name> is not a key there and exactly one name ends so.  C<$name>
+otherwise.
+
+=cut
+
+sub full_name ( $name, $policies ) {
+    return $name if exists $policies->{$name};
+    my @longer = grep { substr( $_, -length("::$name") ) eq "::$name" } keys %$policies;
+    return @longer == 1 ? $longer[0] : $name;
 }
 
 =func overlay
