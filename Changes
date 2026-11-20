@@ -7,6 +7,19 @@ Revision history for Dist-Conformance
       with "does not load".  The pattern is now the rule of
       Module::Runtime, which spells out its character classes.  Such a name
       now fails with "is not the name of a module".
+    - A new check, Shebangs, makes sure that every Perl program in bin,
+      script and t starts with the shebang line of the standards.  The
+      update rewrites the first line of each program that does not.  An
+      installed program needs #!perl, because the install replaces it with
+      the path of the perl that has the modules.  The install leaves
+      #!/usr/bin/env perl alone, so the first perl on PATH runs the program.
+      A repository that runs its programs from its checkout can set the
+      shebang to env perl.
+    - CriticProfile takes pinned, the policies whose parameters are a
+      standard.  A profile that sets one otherwise fails, and the update
+      replaces its section with the section of the template.  Before, the
+      check compared no parameter, so a change of one in the template
+      reached no distribution that already had the policy.
 
 0.006 2026-11-17 TEODESIAN
     - The update of GitHooks installs each hook where git runs it from,

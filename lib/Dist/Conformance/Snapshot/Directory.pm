@@ -142,6 +142,20 @@ sub content ( $self, $path ) {
     return $file->slurp;
 }
 
+=method mode
+
+C<($path)>.  The permission bits of the file, such as C<0755>, or C<undef>.
+For a symbolic link, those of what it points at.  A check that rewrites a file
+passes them to L</write>, so that a program stays executable.
+
+=cut
+
+sub mode ( $self, $path ) {
+    my $file = $self->file($path);
+    return undef if !-e $file || -d _;
+    return ( stat _ )[2] & oct 7777;
+}
+
 =method writable
 
 True.

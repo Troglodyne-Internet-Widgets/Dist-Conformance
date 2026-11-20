@@ -20,6 +20,8 @@ use Dist::Conformance::Schema();
         replace: false
         retired:
           - Subroutines::ProhibitUnderscorePrivateSubs
+        pinned:
+          - logicLAB::RequireSheBang
 
 =head1 DESCRIPTION
 
@@ -44,6 +46,13 @@ from a policy that the standards used to have.  So the standards say which
 policies they take back, by name.  A section C<[-Name]>, which turns a retired
 policy off, is not an error, and stays.
 
+It also fails when the file enables a policy that C<pinned> names with
+parameters other than those of the template, and the detail names each such
+policy.  A pinned policy is one whose parameters are a standard, not a choice
+of the distribution, such as the shebang line that every program must start
+with.  The parameters are compared as Perl::Critic reads them, so the spacing
+around C<=> and the order of the keys do not matter.
+
 What else the file says is the distribution's own business, and does not
 change the result:
 
@@ -52,8 +61,8 @@ change the result:
 =item the parameters of a policy
 
 A policy that the template configures, and the file configures differently or
-not at all, is there.  An exemption or a threshold of its own is a choice of
-the distribution, not a policy that it lacks.
+not at all, is there, unless C<pinned> names it.  An exemption or a threshold
+of its own is a choice of the distribution, not a policy that it lacks.
 
 =item a policy that the template does not enable
 
@@ -79,13 +88,16 @@ fills.
 Without C<replace>, the update also removes the section of each retired policy
 that the file enables: the C<[Name]> line, the parameters below it, and the
 comment lines directly above the C<[Name]> line, up to a line that is blank or
-is not a comment.  A comment block at the very top of the file is its header,
+is not a comment.  It replaces the section of each pinned policy whose
+parameters differ in the same way: it removes the section, and appends the
+section of the template.  A comment block at the very top of the file is its header,
 and stays.  The comment lines and blank lines at the end of the section stay
 as well, because they are usually about the section after it.  Every other
 line stays as it was.
 
 A template that enables a policy that C<retired> names contradicts itself, so
-the check dies, and so does the update, and each says which policy.
+the check dies, and so does the update, and each says which policy.  They die
+too when C<pinned> names a policy that the template does not enable.
 
 =head1 CONFIGURATION
 
@@ -111,6 +123,11 @@ update removes it.  Default none.  Name a policy here when the template drops
 it, and keep it here for as long as a profile made from an older template can
 still enable it.
 
+=item pinned
+
+The policies whose parameters the template sets for every profile, by name,
+with or without the prefix C<Perl::Critic::Policy::>.  Default none.
+
 =item header
 
 =item outdated
@@ -131,6 +148,7 @@ sub config_schema ($) {
             template => $Dist::Conformance::Schema::PATH,
             replace  => { type => 'boolean', default   => 0 },
             retired  => { type => 'array',   items     => $Dist::Conformance::Check::MODULE, uniqueItems => 1, default => [] },
+            pinned   => { type => 'array',   items     => $Dist::Conformance::Check::MODULE, uniqueItems => 1, default => [] },
             header   => { type => 'string',  minLength => 1 },
             outdated => { type => 'array',   items     => { type => 'string', minLength => 1 } },
         },
@@ -146,13 +164,24 @@ C<$where>, when Perl::Critic could not parse the text either.
 =cut
 
 sub policies ( $text, $where ) {
-    my $profile = Config::Tiny->read_string($text) // die( "$where does not parse as a perlcritic profile: " . Config::Tiny->errstr . "\n" );
+    my $profile = profile_of( $text, $where );
     my %policies;
     for my $section ( grep { $_ ne q{_} } keys %$profile ) {
         my ( $off, $name ) = policy_of($section);
         $policies{$name} = $off ? 'disabled' : 'enabled';
     }
     return \%policies;
+}
+
+=func profile_of
+
+C<($text, $where)>.  The profile C<$text>, as L<Config::Tiny> reads it.  Dies,
+naming C<$where>, when Perl::Critic could not parse the text either.
+
+=cut
+
+sub profile_of ( $text, $where ) {
+    return Config::Tiny->read_string($text) // die( "$where does not parse as a perlcritic profile: " . Config::Tiny->errstr . "\n" );
 }
 
 =func policy_of
@@ -212,6 +241,59 @@ sub enabled_retired ( $self, $text, @retired ) {
     return @enabled;
 }
 
+=func parameters_of
+
+C<($text, $where)>.  The parameters of each policy that the profile C<$text>
+enables, as a hash reference from its short name to a hash reference of its
+parameters.  Dies, naming C<$where>, when it does not parse.
+
+=cut
+
+sub parameters_of ( $text, $where ) {
+    my $profile = profile_of( $text, $where );
+    my %parameters;
+    for my $section ( grep { $_ ne q{_} } keys %$profile ) {
+        my ( $off, $name ) = policy_of($section);
+        $parameters{$name} = $profile->{$section} if !$off;
+    }
+    return \%parameters;
+}
+
+=method pinned
+
+The short names of the policies that C<pinned> names, in its order.  Dies
+when the template does not enable one of them, or does not parse.
+
+=cut
+
+sub pinned ($self) {
+    my @pinned = map { ( policy_of($_) )[1] } @{ $self->config->{pinned} };
+    return if !@pinned;
+    my $template = $self->config->{template};
+    my $want     = parameters_of( ( $self->template($template) )[0], $template );
+    my @absent   = grep { !$want->{$_} } @pinned;
+    die( 'pinned names ' . join( ', ', @absent ) . ", which $template does not enable\n" ) if @absent;
+    return @pinned;
+}
+
+=method differing_pinned
+
+C<($text, @pinned)>.  The sorted names of the policies of C<@pinned> that the
+profile C<$text> enables with parameters other than those of the template.
+Dies when either does not parse.
+
+=cut
+
+sub differing_pinned ( $self, $text, @pinned ) {
+    return if !@pinned;
+    my ( $file, $template ) = @{ $self->config }{qw{file template}};
+    my $want      = parameters_of( ( $self->template($template) )[0], $template );
+    my $have      = parameters_of( $text, $file );
+    my $canonical = sub ($parameters) { join "\n", map {"$_=$parameters->{$_}"} sort keys %$parameters };
+    my @differing = sort grep { $have->{$_} && $canonical->( $have->{$_} ) ne $canonical->( $want->{$_} ) } @pinned;
+    return @differing;
+}
+
 =func lacks
 
 C<(@missing)>.  The detail for a profile that lacks the policies C<@missing>,
@@ -227,26 +309,30 @@ sub lacks (@missing) {
 
 C<($text)>.  The status and the detail of the profile C<$text>, as C<check>
 returns them.  For a profile that does not parse, then what a person must do
-to fix it by hand; for one that lacks policies or enables retired ones, then
-C<undef> and two array references: the names of the policies that it lacks,
-and of the retired policies that it enables.  Dies when the template enables a
-retired policy, as L</retired> does.
+to fix it by hand; for one that lacks policies, enables retired ones or sets
+pinned ones otherwise, then C<undef> and three array references: the names of
+the policies that it lacks, of the retired policies that it enables, and of
+the pinned policies whose parameters differ.  Dies when the template enables a
+retired policy, as L</retired> does, or does not enable a pinned one, as
+L</pinned> does.
 
 =cut
 
 sub verdict ( $self, $text ) {
     my $template = $self->config->{template};
     my @retired  = $self->retired;
-    my ( $missing, $enabled ) = eval { ( [ $self->missing_policies($text) ], [ $self->enabled_retired( $text, @retired ) ] ) };
+    my @pinned   = $self->pinned;
+    my ( $missing, $enabled, $differing ) = eval { ( [ $self->missing_policies($text) ], [ $self->enabled_retired( $text, @retired ) ], [ $self->differing_pinned( $text, @pinned ) ] ) };
     if ($@) {
         my $detail = Dist::Conformance::Schema::first_line($@);
         return ( 'fail', $detail, "$detail: fix it by hand, or set replace: true to overwrite it" );
     }
-    return ( 'pass', "has every policy of $template" ) if !@$missing && !@$enabled;
+    return ( 'pass', "has every policy of $template" ) if !@$missing && !@$enabled && !@$differing;
     my @details;
     push @details, lacks(@$missing) . " of $template"                                                                                                     if @$missing;
     push @details, 'enables the retired ' . ( @$enabled == 1 ? 'policy ' : 'policies ' ) . join( ', ', @$enabled ) . ', which conformance update removes' if @$enabled;
-    return ( 'fail', join( '; ', @details ), undef, $missing, $enabled );
+    push @details, 'sets the parameters of ' . join( ', ', @$differing ) . " otherwise than $template, which conformance update replaces"                    if @$differing;
+    return ( 'fail', join( '; ', @details ), undef, $missing, $enabled, $differing );
 }
 
 =func header_of
@@ -345,7 +431,8 @@ sub check ( $self, $snapshot ) {
 Writes the template when the profile is missing, or when it is not current and
 C<replace> is true.  Otherwise removes the sections of the retired policies
 that the profile enables, and appends the sections of the template that it
-lacks, as L</DESCRIPTION> says.
+lacks, and replaces the section of each pinned policy whose parameters differ,
+as L</DESCRIPTION> says.
 
 =cut
 
@@ -353,12 +440,15 @@ sub update ( $self, $update ) {
     my ( $file, $template ) = @{ $self->config }{qw{file template}};
     my $text = $update->snapshot->content($file);
     if ( defined $text ) {
-        my ( $status, undef, $by_hand, $missing, $enabled ) = $self->verdict($text);
+        my ( $status, undef, $by_hand, $missing, $enabled, $differing ) = $self->verdict($text);
         return if $status eq 'pass';
         if ( !$self->config->{replace} ) {
             return $update->by_hand($by_hand) if defined $by_hand;
-            my $edited = without_sections( $text, @$enabled );
-            $edited = $self->append_policies( $update, $edited, @$missing ) // $edited if @$missing;
+            my $edited = without_sections( $text, @$enabled, @$differing );
+            my @append = ( @$missing, @$differing );
+
+            # Without the template, a pinned section stays as it was, and is not just removed.
+            $edited = $self->append_policies( $update, $edited, @append ) // without_sections( $text, @$enabled ) if @append;
             $update->write( $file, $edited ) if $edited ne $text;
             return;
         }

@@ -80,6 +80,17 @@ subtest write => sub {
     ok( $snapshot->writable, 'a directory is writable' );
 };
 
+subtest mode => sub {
+    my $root     = checkout();
+    my $snapshot = Dist::Conformance::Snapshot::Directory->new( root => $root );
+    $snapshot->write( 'bin/run', "#!perl\n", oct 755 );
+    is( $snapshot->mode('bin/run'), oct 755, 'the permission bits of a file' );
+    symlink 'run', $root->child(qw{bin link}) or die "Cannot symlink: $!";
+    is( $snapshot->mode('bin/link'), oct 755, 'and of what a link points at' );
+    is( $snapshot->mode('bin'),      undef,   'none for a directory' );
+    is( $snapshot->mode('absent'),   undef,   'nor for what is not there' );
+};
+
 # A repository that git made, with one commit, so that a worktree can start from it.
 sub repository () {
     my $root = Mojo::File->new( File::Temp::tempdir( CLEANUP => 1 ) );

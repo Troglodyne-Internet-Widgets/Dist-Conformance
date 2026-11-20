@@ -149,6 +149,10 @@ F<.claude/settings.json> enables the plugins.
 
 The CI workflows exist.
 
+=item L<Dist::Conformance::Check::Shebangs>
+
+Every Perl program starts with the shebang line of the standards.
+
 =item L<Dist::Conformance::Check::SystemPackages>
 
 The system packages and archives that F<metamerge.yml> declares are valid.
@@ -299,7 +303,17 @@ fills.  Dies when the source has no such file.
 =cut
 
 sub template ( $self, $path ) {
-    my $text      = $self->source->file($path);
+    return $self->fill( $self->source->file($path) );
+}
+
+=method fill
+
+C<($text)>.  Returns C<$text> with each placeholder replaced by its variable,
+and then the sorted names of the placeholders that no variable fills.
+
+=cut
+
+sub fill ( $self, $text ) {
     my $variables = $self->variables;
     $text =~ s/\{\{ ([[:upper:]][[:upper:][:digit:]_]*) \}\}/exists $variables->{$1} ? $variables->{$1} : "{{$1}}"/ge;
     my @unfilled = List::Util::uniq( sort $text =~ m/\{\{ ([[:upper:]][[:upper:][:digit:]_]*) \}\}/g );

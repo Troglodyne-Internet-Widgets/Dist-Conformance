@@ -180,6 +180,40 @@ subtest 'update: a retired policy' => sub {
     is( Fixture::tree_of($dry),                                    $before,                                              'and removes nothing' );
 };
 
+subtest 'pinned parameters' => sub {
+    my %pin = ( pinned => ['Perl::Critic::Policy::RegularExpressions::RequireDefault'] );
+    is( check_of( checkout_with($CURRENT), %pin ), [ 'pass', 'has every policy of templates/perlcriticrc' ], 'a pinned policy with the parameters of the template passes' );
+    is( check_of( checkout_with("[RegularExpressions::RequireDefault]\nstrict=1\n[Variables::ProhibitReusedNames]\nallow = \$self\n"), %pin ), [ 'pass', 'has every policy of templates/perlcriticrc' ], 'as Perl::Critic reads them, whatever the spacing, and a policy that is not pinned keeps its own' );
+    is( check_of( checkout_with("[-RegularExpressions::RequireDefault]\n[Variables::ProhibitReusedNames]\n"), %pin ), [ 'pass', 'has every policy of templates/perlcriticrc' ], 'a pinned policy that the profile turns off is its choice' );
+    is(
+        check_of( checkout_with("[RegularExpressions::RequireDefault]\nstrict = 0\n[Variables::ProhibitReusedNames]\n"), %pin ),
+        [ 'fail', 'sets the parameters of RegularExpressions::RequireDefault otherwise than templates/perlcriticrc, which conformance update replaces' ], 'a pinned policy with a parameter of its own fails, by name'
+    );
+    is(
+        check_of( checkout_with("[RegularExpressions::RequireDefault]\n[Variables::ProhibitReusedNames]\n"), %pin ),
+        [ 'fail', 'sets the parameters of RegularExpressions::RequireDefault otherwise than templates/perlcriticrc, which conformance update replaces' ], 'and so does one without the parameters of the template'
+    );
+    like( dies { profile( pinned => ['Absent::One'] )->check( Dist::Conformance::Snapshot::Directory->new( root => checkout_with($CURRENT) ) ) }, qr/\Apinned\ names\ Absent::One,\ which\ templates\/perlcriticrc\ does\ not\ enable/, 'a pinned policy that the template does not enable dies' );
+
+    my $root   = checkout_with("# mine\n[RegularExpressions::RequireDefault]\nstrict = 0\n\n[Variables::ProhibitReusedNames]\nallow = \$self\n");
+    my $update = Fixture::run_update( profile(%pin), $root );
+    is( $update->changes,                                     [ { action => 'replace', path => '.perlcriticrc' } ],                                                     'a pinned policy that differs is edited' );
+    is( $root->child('.perlcriticrc')->slurp,                 "# mine\n\n[Variables::ProhibitReusedNames]\nallow = \$self\n[RegularExpressions::RequireDefault]\nstrict = 1\n", 'its section is replaced by the section of the template, and the rest stays' );
+    is( check_of( $root, %pin ),                              [ 'pass', 'has every policy of templates/perlcriticrc' ],                                                'and then it passes' );
+    is( Fixture::run_update( profile(%pin), $root )->changes, [],                                                                                                       'so a second update has nothing to do' );
+
+    my $standards   = Fixture::checkout( 'perlcriticrc' => "[A::B]\nmax = {{MAX}}\n" );
+    my $placeholder = Dist::Conformance::Check::CriticProfile->from_config(
+        name   => 'CriticProfile',
+        config => { %CONFIG, template => 'perlcriticrc', pinned => ['A::B'] },
+        source => Dist::Conformance::Source::Directory->new( directory => "$standards" ),
+    );
+    my $unfilled_root = checkout_with("[A::B]\nmax = 3\n");
+    my $unfilled      = Fixture::run_update( $placeholder, $unfilled_root );
+    is( $unfilled_root->child('.perlcriticrc')->slurp, "[A::B]\nmax = 3\n", 'a template with a placeholder leaves the pinned section as it was, rather than removing it' );
+    is( scalar @{ $unfilled->manual },                 1,                    'and leaves it for a person' );
+};
+
 subtest 'update: a dry run' => sub {
     my $appended = checkout_with($OLD);
     my $as_was   = Fixture::tree_of($appended);

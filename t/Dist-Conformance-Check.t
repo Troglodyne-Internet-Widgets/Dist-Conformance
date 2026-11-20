@@ -73,6 +73,12 @@ subtest template => sub {
     like( dies { $check->template('templates/none') }, qr/have\ no\ templates\/none/, 'a missing template is an error' );
 };
 
+subtest fill => sub {
+    my $check = fake( file => 'x' );
+    is( [ $check->fill('{{DIST}} and {{NONE}}, {{NONE}}') ], [ 'Foo-Bar and {{NONE}}, {{NONE}}', 'NONE' ], 'fills what a variable sets in any text, and names what none sets, once' );
+    is( [ $check->fill('{{lower}}') ],                       ['{{lower}}'],                                'and a name that is not upper case is no placeholder' );
+};
+
 subtest write_template => sub {
     my $check  = fake( file => 'x' );
     my $root   = Fixture::checkout();
