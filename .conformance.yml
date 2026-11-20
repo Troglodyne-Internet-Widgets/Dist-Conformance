@@ -11,3 +11,8 @@ variables:
   GITHUB_USER: Troglodyne-Internet-Widgets
   CPAN_ID: TEODESIAN
   DATE: '2026-11-02'
+checks:
+  CriticProfile:
+    overrides:
+      ProhibitUnusedImports:
+        allow: re Test2::Plugin::NoWarnings Mojo::Base
