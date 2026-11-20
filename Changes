@@ -1,6 +1,6 @@
 Revision history for Dist-Conformance
 
-{{$NEXT}}
+0.007 2026-11-20 TEODESIAN
     - The perlcritic profile is now the template with the overrides of the
       repository, and nothing else.  A repository declares each departure
       in .conformance.yml, under the overrides and the settings of
