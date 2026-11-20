@@ -4,7 +4,7 @@ Dist::Conformance - Whether the development harness of a repository conforms to 
 
 # VERSION
 
-version 0.006
+version 0.007
 
 # SYNOPSIS
 
@@ -150,6 +150,13 @@ order: `check`, the name; `changes`, what it changed or would change, each
 with an `action` and a `path`; and `manual`, what is left for a person.  A
 check whose update dies has the error in `manual`, and the other checks still
 run.
+
+## adopt
+
+Asks every check that is not skipped what configuration would accept the
+checkout as it is now, through ["adopt" in Dist::Conformance::Check](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ACheck#adopt).  Returns a
+hash reference from the name of each check that has an answer to the answer,
+which is what the check would take under `checks` in `.conformance.yml`.
 
 # FUNCTIONS
 
