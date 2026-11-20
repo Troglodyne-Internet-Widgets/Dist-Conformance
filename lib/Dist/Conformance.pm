@@ -293,6 +293,25 @@ sub update ( $self, %options ) {
     return \@results;
 }
 
+=method adopt
+
+Asks every check that is not skipped what configuration would accept the
+checkout as it is now, through L<Dist::Conformance::Check/adopt>.  Returns a
+hash reference from the name of each check that has an answer to the answer,
+which is what the check would take under C<checks> in F<.conformance.yml>.
+
+=cut
+
+sub adopt ($self) {
+    my $snapshot = $self->snapshot;
+    my %adopted;
+    for my $check ( @{ $self->checks } ) {
+        my $answer = $check->adopt($snapshot) // next;
+        $adopted{ $check->name } = $answer;
+    }
+    return \%adopted;
+}
+
 =func failed
 
 C<($results)>.  Whether any result of L</check> failed.
