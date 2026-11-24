@@ -61,8 +61,12 @@ C<pass>, C<info> or C<fail>.
 
 =cut
 
-our $NAME   = { type => 'string', pattern => '\A[A-Za-z0-9][A-Za-z0-9._-]*\z' };
-our $PATH   = { type => 'string', pattern => '\A(?!/)(?!(?:.*/)?[.][.](?:/|\z)).+\z' };
+# Each pattern is a qr// in a string, so that it keeps the modifiers of this file.
+my $NAME_RX = qr/\A[[:alnum:]][[:alnum:]._-]*\z/;
+my $PATH_RX = qr{\A(?!/)(?!(?:[^\n]*/)?[.][.](?:/|\z))[^\n]+\z};
+
+our $NAME   = { type => 'string', pattern => "$NAME_RX" };
+our $PATH   = { type => 'string', pattern => "$PATH_RX" };
 our $STATUS = { type => 'string', enum    => [qw{pass info fail}] };
 
 =func parse_yaml

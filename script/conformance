@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 package Dist::Conformance::Program;
 
 use 5.040;
@@ -220,7 +220,7 @@ sub packages_lines ( $directory, $options ) {
     return $resolved->{programs}                                                                             if $options->{programs};
     return $resolved->{packages}                                                                             if !$options->{sources} && !$options->{needs};
     my $json = Cpanel::JSON::XS->new->utf8->canonical;
-    return [ map { $json->encode($_) } @{ $resolved->{ $options->{sources} ? 'sources' : 'needs' } } ];
+    return [ map { local ($_) = $_; $json->encode($_) } @{ $resolved->{ $options->{sources} ? 'sources' : 'needs' } } ];
 }
 
 =func report_check
@@ -281,7 +281,7 @@ C<($conformance, \%options)>.  The output of C<adopt>, and the exit status.
 sub report_adopt ( $conformance, $options ) {
     my $adopted = $conformance->adopt;
     return ( json_of( $conformance, command => 'adopt', adopted => $adopted ), 0 ) if $options->{json};
-    return ( YAML::XS::Dump( { checks => $adopted } ), 0 );
+    return ( YAML::XS::Dump( { checks => $adopted } ),                         0 );
 }
 
 =func heading

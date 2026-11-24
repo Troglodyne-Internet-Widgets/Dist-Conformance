@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
@@ -72,8 +72,8 @@ subtest matches => sub {
 };
 
 subtest relative_path => sub {
-    is( Dist::Conformance::Schema::relative_path( $_, 'here' ), $_, "'$_' is a relative path" ) for qw{a a/b .a a/..b ...};
-    for my $bad ( qw{/a .. ../a a/.. a/../b}, q{}, "a\nb" ) {
+    for my $path (qw{a a/b .a a/..b ...}) { is( Dist::Conformance::Schema::relative_path( $path, 'here' ), $path, "'$path' is a relative path" ) }
+    for my $bad  ( qw{/a .. ../a a/.. a/../b}, q{}, "a\nb" ) {
         like( dies { Dist::Conformance::Schema::relative_path( $bad, 'here' ) }, qr/is\ not\ a\ relative\ path\ inside\ here/, "'$bad' is refused" );
     }
     like( dies { Dist::Conformance::Schema::relative_path( undef, 'here' ) }, qr/not\ a\ relative\ path/, 'and so is undef' );

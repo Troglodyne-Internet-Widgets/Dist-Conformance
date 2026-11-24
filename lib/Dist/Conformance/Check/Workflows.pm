@@ -61,7 +61,7 @@ C<($snapshot)>.  The required workflows that the snapshot does not have.
 
 sub missing_workflows ( $self, $snapshot ) {
     my ( $directory, $required ) = @{ $self->config }{qw{directory required}};
-    my @missing = grep { !$snapshot->contains("$directory/$_") } sort keys %$required;
+    my @missing = grep { local ($_) = $_; !$snapshot->contains("$directory/$_") } sort keys %$required;
     return @missing;
 }
 

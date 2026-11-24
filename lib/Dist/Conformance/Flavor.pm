@@ -5,6 +5,7 @@ package Dist::Conformance::Flavor;
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
+no autovivification;
 use Mojo::Base -base, -signatures;
 
 use List::Util();
