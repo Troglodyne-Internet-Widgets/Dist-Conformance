@@ -215,7 +215,9 @@ has config => sub { {} };
 has 'source';
 has variables => sub { {} };
 
-our $MODULE = { type => 'string', pattern => "\\A$Module::Runtime::module_name_rx\\z" };
+my $MODULE_NAME_RX = $Module::Runtime::module_name_rx;
+my $MODULE_RX      = qr/\A$MODULE_NAME_RX\z/;
+our $MODULE = { type => 'string', pattern => "$MODULE_RX" };
 
 =method config_schema
 
@@ -343,7 +345,7 @@ have, in their order.
 =cut
 
 sub missing ( $, $snapshot, @paths ) {
-    my @missing = grep { !$snapshot->contains($_) } @paths;
+    my @missing = grep { local ($_) = $_; !$snapshot->contains($_) } @paths;
     return @missing;
 }
 

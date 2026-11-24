@@ -1,4 +1,4 @@
-#!/usr/bin/env perl
+#!perl
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
@@ -100,7 +100,7 @@ subtest declared => sub {
 };
 
 subtest 'deb package names' => sub {
-    is( deb_refusal($_), q{}, "$_ is a deb name" ) for qw{ffmpeg libmagic-dev g++ libstdc++6 python3.12 0ad xz};
+    for my $name (qw{ffmpeg libmagic-dev g++ libstdc++6 python3.12 0ad xz}) { is( deb_refusal($name), q{}, "$name is a deb name" ) }
     like( deb_refusal('x'),                          qr{/Dep/deb:}, 'one character is not' );
     like( deb_refusal('ffmpeg-'),                    qr{/Dep/deb:}, 'a name that ends in -, which apt reads as a removal, is refused' );
     like( deb_refusal('libMagic'),                   qr{/Dep/deb:}, 'and so is an uppercase letter' );
@@ -113,7 +113,7 @@ subtest 'deb package names' => sub {
 };
 
 subtest dependencies => sub {
-    is( refusal_of("x_system_packages:\n  $_: { deb: dep }\n"), q{}, "$_ is the name of a dependency" ) for qw{Foo::Lib ffmpeg libfoo 0ad Foo-Bar_1.2+x};
+    for my $name (qw{Foo::Lib ffmpeg libfoo 0ad Foo-Bar_1.2+x}) { is( refusal_of("x_system_packages:\n  $name: { deb: dep }\n"), q{}, "$name is the name of a dependency" ) }
     like( refusal_of("x_system_packages:\n  '-dep': { deb: dep }\n"),    qr{Properties\ not\ allowed:\ -dep},              'a dependency starts with a letter or a digit' );
     like( refusal_of("x_system_packages:\n  'foo lib': { deb: dep }\n"), qr{Properties\ not\ allowed:\ foo},               'and has no space' );
     like( refusal_of("x_system_packages:\n  'foo/lib': { deb: dep }\n"), qr{Properties\ not\ allowed:\ foo/lib},           'nor a /' );
@@ -142,7 +142,7 @@ subtest entries => sub {
     like( dependency_refusal("    deb: {}\n"),                                                     qr{/Dep/deb:.*names\ no\ package}, 'a mapping without a key is refused' );
     like( dependency_refusal("    deb: { source: jellyfin }\nx_system_sources:\n  deb:\n$SOURCE"), qr{/Dep/deb:.*names\ no\ package}, 'and so is one with a source and no package' );
     my @lines = split /\n/, dependency_refusal("    deb: { Ubuntu: libfoo }\n");
-    is( scalar( grep { /Properties\ not\ allowed/ } @lines ), 1, 'and each error of an entry of a packager with its own rule is reported once, not again under the generic rule' ) or diag join "\n", @lines;
+    is( scalar( grep { index( $_, 'Properties not allowed' ) != -1 } @lines ), 1, 'and each error of an entry of a packager with its own rule is reported once, not again under the generic rule' ) or diag join "\n", @lines;
     like( dependency_refusal("    deb: { Ubuntu: libfoo }\n"),                                                qr{/Dep/deb:.*Properties\ not\ allowed:\ Ubuntu},               'and a key that is not a distro' );
     like( dependency_refusal("    deb: { 'ubuntu/24 04': libfoo }\n"),                                        qr{/Dep/deb:.*Properties\ not\ allowed},                        'or a release' );
     like( dependency_refusal("    deb: { ubuntu/24.04/x: libfoo }\n"),                                        qr{/Dep/deb:.*Properties\ not\ allowed},                        'and a key has one / at most' );
@@ -233,8 +233,8 @@ subtest resolve => sub {
     is( $noble->{sources}[1],                          { name => 'noble', uri => 'https://noble.test.test', suites => ['noble'], components => ['main'], key => 'https://noble.test.test/k', fingerprint => 'E' x 40 }, 'and a resolved source has no distros' );
 
     my $jammy = on( distro => 'ubuntu', release => '22.04', codename => 'jammy' );
-    is( [ grep { /ssl/ } @{ $jammy->{packages} } ], ['libssl3u'],                'on another release of the distro, the distro wins' );
-    is( $jammy->{unresolved},                       [qw{Deb Foo Noble RpmOnly}], 'and an entry only for the release is unresolved' );
+    is( [ grep { index( $_, 'ssl' ) != -1 } @{ $jammy->{packages} } ], ['libssl3u'],                'on another release of the distro, the distro wins' );
+    is( $jammy->{unresolved},                                          [qw{Deb Foo Noble RpmOnly}], 'and an entry only for the release is unresolved' );
 
     my $trixie = on( distro => 'debian', release => '13', codename => 'trixie' );
     is( $trixie->{packages},                                                           [qw{libbar debpkg ffmpeg jellyfin media}],                                           'a null on the release needs no package, and the distro wins over name' );

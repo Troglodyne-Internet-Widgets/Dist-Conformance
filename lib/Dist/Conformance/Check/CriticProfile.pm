@@ -5,6 +5,7 @@ package Dist::Conformance::Check::CriticProfile;
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
+no autovivification;
 use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
 use Config::Tiny();
@@ -173,7 +174,7 @@ when it does not parse.
 =cut
 
 sub profile_of ( $text, $where ) {
-    my $tiny = Config::Tiny->read_string($text) // die( "$where does not parse as a perlcritic profile: " . Config::Tiny->errstr . "\n" );
+    my $tiny    = Config::Tiny->read_string($text) // die( "$where does not parse as a perlcritic profile: " . Config::Tiny->errstr . "\n" );
     my %profile = ( settings => $tiny->{_} // {}, policies => {} );
     for my $section ( grep { $_ ne q{_} } keys %$tiny ) {
         my ( $off, $name ) = policy_of($section);
@@ -232,7 +233,7 @@ sub rewrite ( $lines, $overlay ) {
         push @out, $kept;
         $after = scalar @out if defined $key;
     }
-    my @new = map {"$_ = $overlay->{$_}\n"} grep { !$seen{$_} && defined $overlay->{$_} } sort keys %$overlay;
+    my @new = map { "$_ = $overlay->{$_}\n" } grep { !$seen{$_} && defined $overlay->{$_} } sort keys %$overlay;
     splice @out, $after // 0, 0, @new;
     return @out;
 }
@@ -249,7 +250,7 @@ sub overrides ($self) {
     for my $given ( sort keys %{ $self->config->{overrides} } ) {
         my ( $off, $name ) = policy_of($given);
         die "overrides names $given, which is not the name of a policy\n" if $off || !Dist::Conformance::Schema::matches( $Dist::Conformance::Check::MODULE, $name );
-        die "overrides names the policy $name twice\n"                     if exists $overrides{$name};
+        die "overrides names the policy $name twice\n"                    if exists $overrides{$name};
         $overrides{$name} = $self->config->{overrides}{$given};
     }
     return \%overrides;
@@ -268,7 +269,7 @@ sub expected ($self) {
     my ( $text, @unfilled ) = $self->template($template);
     die( "$template needs the variables " . join( ', ', @unfilled ) . " in .conformance.yml: nothing sets them\n" ) if @unfilled;
     my $standard = profile_of( $text, $template )->{policies};
-    my $given = $self->overrides;
+    my $given    = $self->overrides;
     my %overrides;
     for my $as ( sort keys %$given ) {
         my $name = full_name( $as, $standard );
@@ -326,14 +327,14 @@ reads both the same.
 sub differences ( $have, $want ) {
     my ( $hp, $wp ) = ( $have->{policies}, $want->{policies} );
     my $same = sub ( $x, $y ) {
-        return join( "\n", map {"$_=$x->{$_}"} sort keys %$x ) eq join( "\n", map {"$_=$y->{$_}"} sort keys %$y );
+        return join( "\n", map { "$_=$x->{$_}" } sort keys %$x ) eq join( "\n", map { "$_=$y->{$_}" } sort keys %$y );
     };
     my @kinds = (
-        [ 'lacks the policy',                     grep { !$hp->{$_} } sort keys %$wp ],
-        [ 'names the policy',                     grep { !$wp->{$_} } sort keys %$hp ],
-        [ 'enables the policy',                   grep { $hp->{$_} && $wp->{$_}{off} && !$hp->{$_}{off} } sort keys %$wp ],
-        [ 'turns off the policy',                 grep { $hp->{$_} && !$wp->{$_}{off} && $hp->{$_}{off} } sort keys %$wp ],
-        [ 'sets other parameters for the policy', grep { $hp->{$_} && !$wp->{$_}{off} && !$hp->{$_}{off} && !$same->( $hp->{$_}{parameters}, $wp->{$_}{parameters} ) } sort keys %$wp ],
+        [ 'lacks the policy',     grep { !$hp->{$_} } sort keys %$wp ],
+        [ 'names the policy',     grep { !$wp->{$_} } sort keys %$hp ],
+        [ 'enables the policy',   grep { $hp->{$_} && $wp->{$_}{off}  && !$hp->{$_}{off} } sort keys %$wp ],
+        [ 'turns off the policy', grep { $hp->{$_} && !$wp->{$_}{off} && $hp->{$_}{off} } sort keys %$wp ],
+        [ 'sets other parameters for the policy', grep { local ($_) = $_; $hp->{$_} && !$wp->{$_}{off} && !$hp->{$_}{off} && !$same->( $hp->{$_}{parameters}, $wp->{$_}{parameters} ) } sort keys %$wp ],
     );
     my @differences;
     for my $kind (@kinds) {
@@ -359,7 +360,7 @@ sub check ( $self, $snapshot ) {
     my $text = $snapshot->content($file) // return ( 'fail', "$file is missing" );
     my $want = $self->expected;
     return ( 'pass', "is $template with the overrides" ) if $text eq $want;
-    my $have = eval { profile_of( $text, $file ) } // return ( 'fail', Dist::Conformance::Schema::first_line($@) . ', and conformance update replaces it' );
+    my $have        = eval { profile_of( $text, $file ) } // return ( 'fail', Dist::Conformance::Schema::first_line($@) . ', and conformance update replaces it' );
     my @differences = differences( $have, profile_of( $want, $template ) );
     return ( 'info', "differs from $template with the overrides only in comments and layout, which conformance update rewrites" ) if !@differences;
     return ( 'fail', join( '; ', @differences ) . ', which conformance update corrects' );
@@ -432,7 +433,7 @@ otherwise.
 
 sub full_name ( $name, $policies ) {
     return $name if exists $policies->{$name};
-    my @longer = grep { substr( $_, -length("::$name") ) eq "::$name" } keys %$policies;
+    my @longer = grep { local ($_) = $_; substr( $_, -length("::$name") ) eq "::$name" } keys %$policies;
     return @longer == 1 ? $longer[0] : $name;
 }
 

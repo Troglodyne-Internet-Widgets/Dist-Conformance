@@ -5,6 +5,7 @@ package Dist::Conformance::Check::RefusedIniKeys;
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
+no autovivification;
 use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
 use Config::INI::Reader();

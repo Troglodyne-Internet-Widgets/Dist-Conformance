@@ -5,6 +5,7 @@ package Dist::Conformance::Check::ToolConfiguration;
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
+no autovivification;
 use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
 use Dist::Conformance::Schema();

@@ -54,12 +54,14 @@ C<fail>.
 
 =cut
 
+my $PLUGIN_RX = qr/\A[^@\s]+@[^@\s]+\z/;
+
 sub config_schema ($) {
     return {
         required   => [qw{file plugins}],
         properties => {
             file    => $Dist::Conformance::Schema::PATH,
-            plugins => { type => 'array', items => { type => 'string', pattern => '\A[^@\s]+@[^@\s]+\z' } },
+            plugins => { type => 'array', items => { type => 'string', pattern => "$PLUGIN_RX" } },
             missing => { %$Dist::Conformance::Schema::STATUS, default => 'fail' },
         },
     };
@@ -118,9 +120,9 @@ sub update ( $self, $update ) {
     }
     $settings //= {};
     my @disabled = $self->disabled($settings);
-    return if !@disabled;
-    $settings->{enabledPlugins}     = {} if ref $settings->{enabledPlugins} ne 'HASH';
-    $settings->{enabledPlugins}{$_} = Cpanel::JSON::XS::true() for @disabled;
+    return                           if !@disabled;
+    $settings->{enabledPlugins} = {} if ref $settings->{enabledPlugins} ne 'HASH';
+    for my $plugin (@disabled) { $settings->{enabledPlugins}{$plugin} = Cpanel::JSON::XS::true() }
     $update->write( $self->config->{file}, Dist::Conformance::Schema::encode_json($settings) );
     return;
 }

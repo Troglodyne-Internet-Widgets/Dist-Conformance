@@ -5,6 +5,7 @@ package Dist::Conformance::Check::SystemPackages;
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
+no autovivification;
 use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
 use Lingua::EN::Inflect();
@@ -245,7 +246,14 @@ my sub entry_of ($pattern) {
     };
 }
 
-our $URL = { type => 'string', pattern => '\Ahttps?://[^/\s]+\S*\z' };
+my $URL_RX         = qr{\Ahttps?://[^/\s]+\S*\z};
+my $SUITE_RX       = qr/\A(?:[^\s{}]|\{codename\})+\z/;
+my $NONBLANK_RX    = qr/\A\S+\z/;
+my $ARCH_RX        = qr/\A[[:lower:][:digit:]]+\z/;
+my $FINGERPRINT_RX = qr/\A[[:xdigit:]]{40}\z/;
+my $TEST_RX        = qr/\A[^\n]*\S[^\n]*\z/;
+
+our $URL = { type => 'string', pattern => "$URL_RX" };
 
 our %SOURCE = (
     deb => {
@@ -256,16 +264,16 @@ our %SOURCE = (
             name          => { type => 'string', pattern => $SOURCE_NAME },
             uri           => $URL,
             key           => $URL,
-            suites        => list_of( { type => 'string', pattern => '\A(?:[^\s{}]|\{codename\})+\z' } ),
-            components    => { type => 'array',  items   => { type => 'string', pattern => '\A\S+\z' } },
-            architectures => { type => 'array',  items   => { type => 'string', pattern => '\A[a-z0-9]+\z' } },
-            fingerprint   => { type => 'string', pattern => '\A[0-9A-Fa-f]{40}\z' },
+            suites        => list_of( { type => 'string', pattern => "$SUITE_RX" } ),
+            components    => { type => 'array',  items   => { type => 'string', pattern => "$NONBLANK_RX" } },
+            architectures => { type => 'array',  items   => { type => 'string', pattern => "$ARCH_RX" } },
+            fingerprint   => { type => 'string', pattern => "$FINGERPRINT_RX" },
             distros       => list_of( { type => 'string', pattern => $HOST } ),
             pin           => {
                 type                 => 'object',
                 required             => ['priority'],
                 additionalProperties => 0,
-                properties           => { priority => { type => 'integer' }, packages => { type => 'string', pattern => '\A\S+\z' } },
+                properties           => { priority => { type => 'integer' }, packages => { type => 'string', pattern => "$NONBLANK_RX" } },
             },
         },
     },
@@ -283,7 +291,7 @@ our $SCHEMA = {
                     more_than( test => 'names no packager' ),
                     additionalProperties => 0,
                     properties           => {
-                        test => { type => 'string', pattern => '\A[^\n]*\S[^\n]*\z' },
+                        test => { type => 'string', pattern => "$TEST_RX" },
                         map { $_ => entry_of( $PACKAGE_NAME{$_} ) } keys %PACKAGE_NAME,
                     },
                     patternProperties => { '(?!(?:' . join( q{|}, sort keys %PACKAGE_NAME ) . ')\z)' . $PACKAGER => entry_of($ANY_PACKAGE_NAME) },
@@ -518,7 +526,7 @@ sub check ( $, $snapshot ) {
     return ( 'fail', "$FILE is not valid: " . join '; ', @errors ) if @errors;
     my $declaration = declaration_of($document);
     my $sources     = $declaration->{sources};
-    my @said        = ( map { Lingua::EN::Inflect::NO( "$_ source", scalar @{ $sources->{$_} } ) } sort keys %$sources );
+    my @said        = ( map { local ($_) = $_; Lingua::EN::Inflect::NO( "$_ source", scalar @{ $sources->{$_} } ) } sort keys %$sources );
     unshift @said, Lingua::EN::Inflect::NO( 'dependency', scalar keys %{ $declaration->{packages} } ) if %{ $declaration->{packages} };
     return ( 'pass', "$FILE declares no system packages" ) if !@said;
     my $last = pop @said;

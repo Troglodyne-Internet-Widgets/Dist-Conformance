@@ -5,6 +5,7 @@ package Dist::Conformance;
 use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
+no autovivification;
 use Mojo::Base -base, -signatures;
 
 use List::Util();
@@ -195,7 +196,7 @@ sub checks ($self) {
         Dist::Conformance::Flavor::merge_checks( \%merged, $self->config->{checks} );
         my %variables = ( %{ $flavor->variables }, %{ $self->config->{variables} } );
         [
-            map  { $self->make_check( $_, $merged{$_}, \%variables ) }
+            map  { local ($_) = $_; $self->make_check( $_, $merged{$_}, \%variables ) }
             grep { !$skipped->{$_} } $flavor->check_names
         ];
     };
@@ -246,7 +247,7 @@ C<info>.
 
 sub check ($self) {
     my $snapshot = $self->snapshot;
-    my %run      = map { $_->name => $_ } @{ $self->checks };
+    my %run      = map { local ($_) = $_; $_->name => $_ } @{ $self->checks };
     my @results;
     for my $name ( $self->flavor->check_names ) {
         my $check = $run{$name};
