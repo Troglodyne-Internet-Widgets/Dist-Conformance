@@ -150,7 +150,8 @@ The CI workflows exist.
 
 =item L<Dist::Conformance::Check::SystemPackages>
 
-The system packages and archives that F<metamerge.yml> declares are valid.
+The system packages and archives that F<metamerge.yml> declares are valid, and
+include those of a template.
 
 =back
 
