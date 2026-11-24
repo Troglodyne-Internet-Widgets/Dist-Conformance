@@ -10,7 +10,6 @@ use Mojo::Base 'Dist::Conformance::Check', -signatures;
 
 use Lingua::EN::Inflect();
 use List::Util();
-use YAML::XS();
 
 use Dist::Conformance::Schema();
 use Dist::Conformance::Snapshot::Directory();
@@ -219,9 +218,17 @@ compare it with the template.
 The update writes the template when the repository has no F<metamerge.yml>.
 When it has one, the update adds each dependency that is missing, and each
 source of the template that such a dependency names and the repository lacks.
-It keeps every other key, and writes the file again with L<YAML::XS>, so the
-comments of the file and the order of its keys are lost.  A file that does not
-parse is left for a person, and so is a declaration that is not valid.
+It edits the text of the file: each entry goes at the end of the block of
+its key, at the indentation of the entries that are there, or in a new block
+at the end of the file when the key is absent.  So the comments, the order of
+the keys and the layout of the rest of the file stay as they are.
+
+Then it parses what it would write.  Unless that is the old declaration with
+exactly the added entries, it writes nothing, and says to add them by hand.
+That is the case for a key whose value is in flow style, such as
+C<x_system_packages: {}>, and for a layout that it cannot edit in this way.
+A file that does not parse is left for a person too, and so is a declaration
+that is not valid.
 
 =back
 
@@ -617,17 +624,30 @@ sub update ( $self, $update ) {
     }
     my $required = $self->required;
     my @missing  = missing_from( $document, $required ) or return;
+    my @additions;
     for my $name (@missing) {
         my $dependency = $required->{$PACKAGES}{$name};
         $document->{$PACKAGES}{$name} = $dependency;
+        push @additions, [ [$PACKAGES], { $name => $dependency } ];
         for my $packager ( grep { ref $dependency->{$_} && defined $dependency->{$_}{source} } sort keys %$dependency ) {
-            my $source  = $dependency->{$packager}{source};
-            my $sources = $document->{$SOURCES}{$packager} //= [];
-            next if List::Util::any { $_->{name} eq $source } @$sources;
-            push @$sources, List::Util::first { $_->{name} eq $source } @{ $required->{$SOURCES}{$packager} };
+            my $source_name = $dependency->{$packager}{source};
+            my $sources     = $document->{$SOURCES}{$packager} //= [];
+            next if List::Util::any { $_->{name} eq $source_name } @$sources;
+            my $source = List::Util::first { $_->{name} eq $source_name } @{ $required->{$SOURCES}{$packager} };
+            push @$sources,  $source;
+            push @additions, [ [ $SOURCES, $packager ], [$source] ];
         }
     }
-    $update->write( $FILE, YAML::XS::Dump($document) );
+    my $text = $snapshot->content($FILE);
+    my $same = eval {
+        for my $addition (@additions) { $text = Dist::Conformance::Schema::insert_yaml( $text, @$addition ) }
+        Dist::Conformance::Schema::encode_json( Dist::Conformance::Schema::parse_yaml( $text, $FILE ) ) eq Dist::Conformance::Schema::encode_json($document);
+    };
+    if ( !$same ) {
+        $update->by_hand( "Add " . join( ', ', @missing ) . " to $FILE by hand: its layout is not one that the update can edit" );
+        return;
+    }
+    $update->write( $FILE, $text );
     return;
 }
 

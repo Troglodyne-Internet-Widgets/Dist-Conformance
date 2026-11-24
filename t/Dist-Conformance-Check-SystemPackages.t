@@ -351,4 +351,78 @@ subtest 'update with a template' => sub {
     is( $update->changes, [ { action => 'create', path => 'metamerge.yml' } ], 'and says what it would create' );
 };
 
+# The template adds ffmpeg, with its source jellyfin, to the end of each block, in the layout of the YAML::XS dump.
+subtest 'update keeps the text of the file' => sub {
+    my $check = Fixture::make_check( $CLASS, $TEMPLATE );
+    my $own   = <<'YAML';
+# The packages of the operating system.
+x_system_packages:
+  # For the thumbnails.
+  zeta: { deb: { name: zeta, source: own } }
+  aspell: { deb: aspell }    # our own name
+
+x_system_sources:
+  deb:
+    - name: own
+      uri: https://own.test.test
+      suites: [stable]
+      components: [main]
+      key: https://own.test.test/k
+      fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567
+# Not for the packager.
+name: x
+YAML
+    my $added = <<'YAML';
+# The packages of the operating system.
+x_system_packages:
+  # For the thumbnails.
+  zeta: { deb: { name: zeta, source: own } }
+  aspell: { deb: aspell }    # our own name
+  ffmpeg:
+    deb:
+      name: ffmpeg
+      source: jellyfin
+
+x_system_sources:
+  deb:
+    - name: own
+      uri: https://own.test.test
+      suites: [stable]
+      components: [main]
+      key: https://own.test.test/k
+      fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567
+    - components:
+      - main
+      fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567
+      key: https://repo.test.test/key.gpg
+      name: jellyfin
+      suites:
+      - '{codename}'
+      uri: https://repo.test.test/ubuntu
+# Not for the packager.
+name: x
+YAML
+    my $root = Fixture::checkout( 'metamerge.yml' => $own );
+    is( Fixture::run_update( $check, $root )->manual, [],     'the update leaves nothing for a person' );
+    is( $root->child('metamerge.yml')->slurp,         $added, 'and adds each entry at the end of its block, with the comments, the order and the layout of the rest kept' );
+
+    $root = Fixture::checkout( 'metamerge.yml' => "# Only this.\nname: x" );
+    Fixture::run_update( $check, $root );
+    is( index( $root->child('metamerge.yml')->slurp, "# Only this.\nname: x\nx_system_packages:\n  aspell:\n" ), 0, 'a key that is absent is a new block at the end' );
+
+    my %refused = (
+        'a key in flow style'             => "x_system_packages: { aspell: { deb: aspell } }\n",
+        'an anchor on the key'            => "x_system_packages: &packages\n  aspell: { deb: aspell }\n",
+        'a key in quotes'                 => qq{"x_system_packages":\n  aspell: { deb: aspell }\n},
+        'a list at the indent of its key' => "x_system_packages:\n  aspell: { deb: aspell }\n  zeta: { deb: { name: zeta, source: own } }\nx_system_sources:\n  deb:\n  - { name: own, uri: 'https://own.test.test', suites: [stable], components: [main], key: 'https://own.test.test/k', fingerprint: 0123456789ABCDEF0123456789ABCDEF01234567 }\n",
+    );
+    for my $layout ( sort keys %refused ) {
+        $root = Fixture::checkout( 'metamerge.yml' => $refused{$layout} );
+        my $before = Fixture::tree_of($root);
+        my $update = Fixture::run_update( $check, $root );
+        is( Fixture::tree_of($root), $before,                                                      "$layout is left as it is" );
+        is( $update->manual,         [ match(qr/\AAdd\ ffmpeg\ to\ metamerge[.]yml\ by\ hand:/) ], 'and a person is told to add the entries' );
+    }
+};
+
 done_testing;
