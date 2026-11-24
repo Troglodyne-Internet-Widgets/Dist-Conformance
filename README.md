@@ -4,7 +4,7 @@ Dist::Conformance - Whether the development harness of a repository conforms to 
 
 # VERSION
 
-version 0.007
+version 0.008
 
 # SYNOPSIS
 
