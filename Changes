@@ -1,5 +1,8 @@
 Revision history for Dist-Conformance
 
+0.010 2026-11-25 TEODESIAN
+    - Add IniTemplate, which holds an INI file to its template with the overrides of the repository, and DistIni, which does so for dist.ini, authordeps included
+
 0.009 2026-11-25 TEODESIAN
     - metamerge.yml declares aspell, which the spelling policy of the critic profile runs
     - The POD of each sub now gives the type of each argument, what it returns, how it fails, and an example call
