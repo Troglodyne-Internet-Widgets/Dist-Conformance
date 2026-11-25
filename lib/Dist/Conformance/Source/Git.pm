@@ -64,10 +64,22 @@ has cache   => sub {
     return Mojo::File->new($base)->child('dist-conformance')->to_string;
 };
 
-=method new
+=method new(@args)
+
+A new source.  It fetches nothing until the first read.
+
+=over 4
+
+=item args - Hash - the attributes, such as L</url> and L</ref>, as named arguments
+
+=back
+
+Returns a Dist::Conformance::Source::Git object.
 
 Dies unless L</url> is given, and on a URL or a ref that git would take for an
 option.
+
+    my $source = Dist::Conformance::Source::Git->new( url => 'https://forge.test.test/standards.git' );
 
 =cut
 
@@ -79,12 +91,10 @@ sub new ( $class, @args ) {
     return $self;
 }
 
-=method clone_dir
-
-The directory of the clone of this URL and ref, as a L<Mojo::File>.
-
-=cut
-
+# The directory of the clone of this URL and ref, which may not exist yet.
+# @returns InstanceOf["Mojo::File"]  the directory
+# @throws  when neither C<$XDG_CACHE_HOME> nor C<$HOME> is set and no L</cache> is given
+# @example my $clone = $source->clone_dir;
 sub clone_dir ($self) {
     return Mojo::File->new( $self->cache )->child( Digest::SHA::sha1_hex( $self->url . "\n" . $self->ref ) );
 }
@@ -92,6 +102,13 @@ sub clone_dir ($self) {
 =method root
 
 The checkout, after a L</fetch> unless L</offline>.  Memoized on the object.
+
+Returns a Mojo::File object.
+
+Dies when it is L</offline> and there is no clone yet, and when the fetch
+fails.
+
+    my $top = $source->root;
 
 =cut
 
@@ -108,14 +125,11 @@ sub root ($self) {
     };
 }
 
-=method fetch
-
-Clones the repository if there is no clone yet, fetches L</ref>, and checks out
-what it fetched, discarding any change in the checkout.  Dies with what git
-said when a step fails.
-
-=cut
-
+# Clones the repository if there is no clone yet, fetches L</ref>, and checks out
+# what it fetched, discarding any change in the checkout.
+# @returns InstanceOf["Mojo::File"]  the directory of the clone
+# @throws  with what git said when a step fails
+# @example $source->fetch;
 sub fetch ($self) {
     my $dir = $self->clone_dir;
     if ( !-d $dir->child('.git') ) {
@@ -130,7 +144,11 @@ sub fetch ($self) {
 
 =method describe
 
-The URL and the ref.
+The URL and the ref, and the path inside the repository.
+
+Returns Str.
+
+    say 'Flavor from ', $source->describe;
 
 =cut
 
@@ -138,11 +156,22 @@ sub describe ($self) {
     return $self->url . ' at ' . $self->ref . ( $self->path ne q{} ? ' (path ' . $self->path . ')' : q{} );
 }
 
-=func git
+=func git(@arguments)
 
-C<(@arguments)>.  Runs C<git> with C<@arguments>, and dies with its standard
-error when it fails.  Every call to git goes through this function, so a test
-can replace it.
+Runs C<git> with C<@arguments>.  Every call to git goes through this function,
+so a test can replace it.
+
+=over 4
+
+=item arguments - Array - the arguments of git
+
+=back
+
+Returns Str, the standard output of git.
+
+Dies with its standard error when git fails.
+
+    my $head = Dist::Conformance::Source::Git::git( qw{-C /bogus/checkout rev-parse HEAD} );
 
 =cut
 

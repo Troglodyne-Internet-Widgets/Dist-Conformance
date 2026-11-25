@@ -241,17 +241,15 @@ our %SCHEMA = (
     },
 );
 
-=method load
-
-C<($class, $source, $name)>.  Reads the flavor C<$name> and everything it
-extends from C<$source>, a L<Dist::Conformance::Source>, and returns the merged
-flavor.  Dies when a file is missing, does not parse or does not match the
-schema, when a check has a name that is not a L<Dist::Conformance::Schema/$NAME>,
-and on a cycle in C<extends>.  Each message names the file, and the key where
-there is one.
-
-=cut
-
+# Reads the flavor C<$name> and everything it extends from C<$source>, and
+# merges them.  Each error names the file, and the key where there is one.
+# @param   source  InstanceOf["Dist::Conformance::Source"]  the standards
+# @param   name    Str  the name of the flavor
+# @returns InstanceOf["Dist::Conformance::Flavor"]  the merged flavor
+# @throws  when a file is missing, does not parse or does not match the schema,
+# when a check has a name that is not a L<Dist::Conformance::Schema/$NAME>, and
+# on a cycle in C<extends>
+# @example my $flavor = Dist::Conformance::Flavor->load( $source, 'troglodyne' );
 sub load ( $class, $source, $name ) {
     my @order = linearize( $source, $name );
     my ( %checks, %variables );
@@ -268,10 +266,24 @@ sub load ( $class, $source, $name ) {
     );
 }
 
-=func linearize
+=func linearize($source, $name)
 
-C<($source, $name)>.  The validated contents of the flavor files that make up
-the flavor C<$name>, in the order of L</THE MERGE RULE>.  Dies on a cycle.
+The validated contents of the flavor files that make up the flavor C<$name>,
+in the order of L</THE MERGE RULE>.
+
+=over 4
+
+=item source - InstanceOf["Dist::Conformance::Source"] - the standards
+
+=item name - Str - the name of the flavor
+
+=back
+
+Returns the contents, as a list of hash references, the flavor C<$name> last.
+
+Dies on a cycle in C<extends>, and as L<read_file|/"read_file($source, $name, $extended_by)"> does.
+
+    my @order = Dist::Conformance::Flavor::linearize( $source, 'troglodyne' );
 
 =cut
 
@@ -295,23 +307,31 @@ sub linearize ( $source, $name ) {
     return @order;
 }
 
-=method check_names
-
-The names of the checks, in the order that they run.
-
-=cut
-
+# The names of the checks, in the order that they run, which is sorted.
+# @returns the names, as a list
+# @example say for $flavor->check_names;
 sub check_names ($self) {
     my @names = sort keys %{ $self->checks };
     return @names;
 }
 
-=func merge_checks
+=func merge_checks(\%checks, \%over)
 
-C<(\%checks, \%over)>.  Lays C<%over>, a mapping of check names to
-configurations, over C<%checks> in place, by L</THE MERGE RULE>.  A
-configuration in C<%checks> is replaced, never changed, so that a caller can
-share one with another flavor.
+Lays C<%over>, a mapping of check names to configurations, over C<%checks> in
+place, by L</THE MERGE RULE>.  A configuration in C<%checks> is replaced,
+never changed, so that a caller can share one with another flavor.
+
+=over 4
+
+=item checks - HashRef - the configurations to change, by the name of each check
+
+=item over - HashRef - the configurations to lay over them, by the name of each check
+
+=back
+
+Returns HashRef, C<$checks>.
+
+    Dist::Conformance::Flavor::merge_checks( \%checks, { ClaudeMd => { mentions => [] }, Workflows => undef } );
 
 =cut
 
@@ -329,11 +349,29 @@ sub merge_checks ( $checks, $over ) {
     return $checks;
 }
 
-=func read_file
+=func read_file($source, $name, $extended_by)
 
-C<($source, $name, $extended_by)>.  The validated content of
-F<conformance/$name.yml>.  C<$extended_by> is the flavor whose C<extends> named
-it, for the message when it is missing.
+The validated content of F<conformance/$name.yml>.
+
+=over 4
+
+=item source - InstanceOf["Dist::Conformance::Source"] - the standards
+
+=item name - Str - the name of the flavor
+
+=item extended_by - Str - optional: the flavor whose C<extends> named it, for the
+message when it is missing
+
+=back
+
+Returns HashRef, the content.
+
+Dies when C<$name> is not the name of a flavor, when the file is missing,
+does not parse or does not match the schema, when its C<name> is not
+C<$name>, and when a check has a name that is not a
+L<Dist::Conformance::Schema/$NAME>.
+
+    my $data = Dist::Conformance::Flavor::read_file( $source, 'troglodyne' );
 
 =cut
 

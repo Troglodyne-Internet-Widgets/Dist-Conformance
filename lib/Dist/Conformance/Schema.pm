@@ -69,11 +69,24 @@ our $NAME   = { type => 'string', pattern => "$NAME_RX" };
 our $PATH   = { type => 'string', pattern => "$PATH_RX" };
 our $STATUS = { type => 'string', enum    => [qw{pass info fail}] };
 
-=func parse_yaml
+=func parse_yaml($text, $where)
 
-C<($text, $where)>.  Returns the mapping that the YAML document C<$text> holds.
-Dies with a message that starts with C<$where> when the text does not parse, or
-when its top level is not a mapping.
+The mapping that the YAML document C<$text> holds.
+
+=over 4
+
+=item text - Str - the YAML document
+
+=item where - Str - names the document in an error, such as its file
+
+=back
+
+Returns HashRef, the mapping.
+
+Dies with a message that starts with C<$where> when the text does not parse,
+or when its top level is not a mapping.
+
+    my $data = Dist::Conformance::Schema::parse_yaml( "name: troglodyne\n", 'conformance/troglodyne.yml' );
 
 =cut
 
@@ -84,9 +97,24 @@ sub parse_yaml ( $text, $where ) {
     return $data;
 }
 
-=func parse_json
+=func parse_json($bytes, $where)
 
-C<($bytes, $where)>.  The same as L</parse_yaml>, for UTF-8 JSON text.
+The same as L<parse_yaml|/"parse_yaml($text, $where)">, for UTF-8 JSON text.
+
+=over 4
+
+=item bytes - Str - the JSON text, as UTF-8 bytes
+
+=item where - Str - names the text in an error, such as its file
+
+=back
+
+Returns HashRef, the object.
+
+Dies with a message that starts with C<$where> when the text does not parse,
+or when its top level is not an object.
+
+    my $settings = Dist::Conformance::Schema::parse_json( '{"enabledPlugins":{}}', '.claude/settings.json' );
 
 =cut
 
@@ -97,11 +125,21 @@ sub parse_json ( $bytes, $where ) {
     return $data;
 }
 
-=func encode_json
+=func encode_json($data)
 
-C<($data)>.  Returns C<$data> as UTF-8 JSON, indented by two spaces, with the
-keys sorted, and with a final newline, so that a file that this distribution
-writes gives a small diff the next time it changes.
+C<$data> as UTF-8 JSON, indented by two spaces, with the keys sorted, and with
+a final newline, so that a file that this distribution writes gives a small
+diff the next time it changes.
+
+=over 4
+
+=item data - Ref - the data to encode
+
+=back
+
+Returns Str, the JSON, as UTF-8 bytes.
+
+    my $json = Dist::Conformance::Schema::encode_json( { enabledPlugins => {} } );
 
 =cut
 
@@ -109,21 +147,35 @@ sub encode_json ($data) {
     return Cpanel::JSON::XS->new->utf8->pretty->space_before(0)->canonical->indent_length(2)->encode($data);
 }
 
-=func insert_yaml
+=func insert_yaml($text, $path, $data)
 
-C<($text, $path, $data)>.  The YAML text C<$text>, with C<$data> added to the
-collection at the keys of C<@$path> from the top, such as
-C<['x_system_sources', 'deb']>.  C<$data> is a mapping, whose entries are
-added, or a list, whose items are added.  They go at the end of the block of
-the last key, at the indentation of the block, and every other line stays as
-it is.  A key that is not there is added at the end of the block of the key
-above it, or of the text, with C<$data> under it.  The text ends in a newline.
+The YAML text C<$text>, with C<$data> added to the collection at the keys of
+C<@$path> from the top.  C<$data> is a mapping, whose entries are added, or a
+list, whose items are added.  They go at the end of the block of the last key,
+at the indentation of the block, and every other line stays as it is.  A key
+that is not there is added at the end of the block of the key above it, or of
+the text, with C<$data> under it.
 
 It edits text, and does not parse it.  So it can give text that does not say
 what it should, such as for a key in quotes, or a list at the indentation of
 its key.  The caller parses the result, and compares it with what it expects.
+
+=over 4
+
+=item text - Str - the YAML text
+
+=item path - ArrayRef[Str] - the keys, from the top, such as C<['x_system_sources', 'deb']>
+
+=item data - HashRef|ArrayRef - the entries or the items to add
+
+=back
+
+Returns Str, the new text, which ends in a newline.
+
 Dies when a key on the path has something after it on its line, such as a
 collection in flow style or an anchor.
+
+    my $text = Dist::Conformance::Schema::insert_yaml( $yaml, ['x_system_packages'], { aspell => { deb => 'aspell' } } );
 
 =cut
 
@@ -156,14 +208,29 @@ sub insert_yaml ( $text, $path, $data ) {
     return join( "\n", @lines ) . "\n";
 }
 
-=func validate
+=func validate($data, $schema, $where)
 
-C<($data, $schema, $where)>.  Returns a copy of C<$data> with the defaults of
-C<$schema> filled in.  Dies when the data does not match: the message starts
-with C<$where is not valid:>, and then gives each error on a line of its own,
-as the JSON pointer of the key and what is wrong with it, such as
-C</checks/ClaudeMd/file: Expected string - got array.>  The caller's data is not
-changed.
+A copy of C<$data> with the defaults of C<$schema> filled in.  The caller's
+data is not changed.
+
+=over 4
+
+=item data - HashRef - the data to check
+
+=item schema - HashRef - the schema, as L</DESCRIPTION> says
+
+=item where - Str - names the data in an error, such as its file
+
+=back
+
+Returns HashRef, the copy.
+
+Dies when the data does not match: the message starts with C<$where is not
+valid:>, and then gives each error on a line of its own, as the JSON pointer
+of the key and what is wrong with it, such as C</checks/ClaudeMd/file:
+Expected string - got array.>
+
+    my $data = Dist::Conformance::Schema::validate( { name => 'troglodyne' }, { type => 'object', properties => { name => $Dist::Conformance::Schema::NAME } }, 'conformance/troglodyne.yml' );
 
 =cut
 
@@ -174,11 +241,23 @@ sub validate ( $data, $schema, $where ) {
     return $copy;
 }
 
-=func refuse
+=func refuse($where, @errors)
 
-C<($where, @errors)>.  Dies with the message of L</validate>: C<$where is not
-valid:>, and then each error on a line of its own.  For a check of the data
-that a schema cannot express, so that its errors read as those of the schema.
+Dies with the message of L<validate|/"validate($data, $schema, $where)">: C<$where is not valid:>, and then each
+error on a line of its own.  For a check of the data that a schema cannot
+express, so that its errors read as those of the schema.
+
+=over 4
+
+=item where - Str - names the data, such as its file
+
+=item errors - Array - the errors, each as the JSON pointer of a key and what is wrong with it
+
+=back
+
+Returns nothing: it always dies.
+
+    Dist::Conformance::Schema::refuse( '.conformance.yml', '/skip/0: names a check that the flavor troglodyne does not run' );
 
 =cut
 
@@ -186,11 +265,23 @@ sub refuse ( $where, @errors ) {
     die join( "\n", "$where is not valid:", map { "  $_" } @errors ), "\n";
 }
 
-=func errors
+=func errors($data, $schema)
 
-C<($data, $schema)>.  The errors of C<$data> against C<$schema>, each as a
-string that starts with the JSON pointer of its key, or none.  Fills in the
-defaults of C<$schema> in C<$data>, and coerces its booleans, in place.
+The errors of C<$data> against C<$schema>.  Fills in the defaults of
+C<$schema> in C<$data>, and coerces its booleans, in place.
+
+=over 4
+
+=item data - HashRef - the data to check, which it changes
+
+=item schema - HashRef - the schema
+
+=back
+
+Returns the errors, as a list of strings that each start with the JSON
+pointer of the key, or an empty list.
+
+    my @errors = Dist::Conformance::Schema::errors( $data, { type => 'object', required => ['name'] } );
 
 =cut
 
@@ -201,11 +292,22 @@ sub errors ( $data, $schema ) {
     return @errors;
 }
 
-=func matches
+=func matches($fragment, $value)
 
-C<($fragment, $value)>.  Whether C<$value> is defined and matches the
-C<pattern> of C<$fragment>, such as L</$NAME>, in the way that JSON::Validator
-matches it.
+Whether C<$value> is defined and matches the C<pattern> of C<$fragment>, such
+as L</$NAME>, in the way that JSON::Validator matches it.
+
+=over 4
+
+=item fragment - HashRef - a schema with a C<pattern>
+
+=item value - Str|Undef - the value to match
+
+=back
+
+Returns Bool.
+
+    my $ok = Dist::Conformance::Schema::matches( $Dist::Conformance::Schema::NAME, 'troglodyne' );
 
 =cut
 
@@ -215,11 +317,24 @@ sub matches ( $fragment, $value ) {
     return defined $value && $value =~ m/(?^:$fragment->{pattern})/;
 }
 
-=func relative_path
+=func relative_path($path, $inside)
 
-C<($path, $inside)>.  Returns C<$path> when it matches L</$PATH>.  Otherwise
-dies with C<$path is not a relative path inside $inside>.  Every read and write
-of a path that a flavor names goes through it.
+C<$path>, when it matches L</$PATH>.  Every read and write of a path that a
+flavor names goes through it.
+
+=over 4
+
+=item path - Str|Undef - the path
+
+=item inside - Str - what the path is inside, for the message, such as C<the checkout>
+
+=back
+
+Returns Str, C<$path>.
+
+Dies with C<$path is not a relative path inside $inside> otherwise.
+
+    my $path = Dist::Conformance::Schema::relative_path( 'templates/CLAUDE.md', 'the standards' );
 
 =cut
 
@@ -229,14 +344,27 @@ sub relative_path ( $path, $inside ) {
     return $path;
 }
 
-=func parse_ini
+=func parse_ini($text, $where)
 
-C<($text, $where)>.  The same as L</parse_yaml>, for an INI file such as
-F<dist.ini>.  Returns a hash of sections by their whole header, such as
-C<GithubMeta> or C<Git::Commit / Release>, each a hash of its keys.  The keys
+The same as L<parse_yaml|/"parse_yaml($text, $where)">, for an INI file such as F<dist.ini>.  The keys
 before the first header are in the section C<_>.  A key that a section gives
 more than once, such as C<run> in C<[Run::Test]>, has the list of its values,
 in order, as Dist::Zilla reads it.  Any other key has its value.
+
+=over 4
+
+=item text - Str - the INI text
+
+=item where - Str - names the text in an error, such as its file
+
+=back
+
+Returns HashRef, of sections by their whole header, such as C<GithubMeta> or
+C<Git::Commit / Release>, each a hash of its keys.
+
+Dies with a message that starts with C<$where> when the text does not parse.
+
+    my $ini = Dist::Conformance::Schema::parse_ini( "[GithubMeta]\nissues = 1\n", 'dist.ini' );
 
 =cut
 
@@ -246,12 +374,22 @@ sub parse_ini ( $text, $where ) {
     return $data;
 }
 
-=func first_line
+=func first_line($text)
 
-C<($text)>.  The first line of an error from other code, without the "at FILE
-line N" that perl adds to it, for a message that is about a file of the user
-and not about a line of this code.  The errors of this distribution end in a
-newline, so perl adds nothing to them.
+The first line of an error from other code, without the "at FILE line N" that
+perl adds to it, for a message that is about a file of the user and not about
+a line of this code.  The errors of this distribution end in a newline, so
+perl adds nothing to them.
+
+=over 4
+
+=item text - Str|Undef - the error
+
+=back
+
+Returns Str, the line, which is empty for an undefined error.
+
+    my $line = Dist::Conformance::Schema::first_line($@);
 
 =cut
 

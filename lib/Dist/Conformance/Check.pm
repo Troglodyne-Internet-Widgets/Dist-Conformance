@@ -41,7 +41,7 @@ L</check> reads the snapshot, and returns a status and a detail.
 
 =item how to update
 
-L</update> changes a checkout so that the check passes, through a
+L<update|/"update(update)"> changes a checkout so that the check passes, through a
 L<Dist::Conformance::Update>, which records what it changed and writes nothing
 on a dry run.  What it cannot do safely, it says so, as a sentence for a
 person, rather than guessing.
@@ -220,24 +220,17 @@ my $MODULE_NAME_RX = $Module::Runtime::module_name_rx;
 my $MODULE_RX      = qr/\A$MODULE_NAME_RX\z/;
 our $MODULE = { type => 'string', pattern => "$MODULE_RX" };
 
-=method config_schema
-
-The schema of the keys that this check takes, as a hash reference with
-C<properties>, and C<required> if any are.  Every key in it is documented in
-the POD of the check.  The base class takes none of its own; L</schema> adds
-L</THE KEYS THAT EVERY CHECK TAKES>.
-
-=cut
-
+# The schema of the keys that this check takes.  Every key in it is documented
+# in the POD of the check.  The base class takes none of its own; L</schema>
+# adds L</THE KEYS THAT EVERY CHECK TAKES>.
+# @returns HashRef  with C<properties>, and C<required> if any key is required
+# @example my $schema = Dist::Conformance::Check::ClaudeMd->config_schema;
 sub config_schema ($) { return { properties => {} } }
 
-=method schema
-
-The whole schema of the configuration: L</config_schema>, the keys that every
-check takes, and no others.
-
-=cut
-
+# The whole schema of the configuration: L</config_schema>, the keys that every
+# check takes, and no others.
+# @returns HashRef  an object schema that allows no other keys
+# @example my $schema = Dist::Conformance::Check::ClaudeMd->schema;
 sub schema ($class) {
     my $own = $class->config_schema;
     return {
@@ -252,67 +245,68 @@ sub schema ($class) {
     };
 }
 
-=method from_config
-
-C<(%arguments)>.  A new check, whose C<config> is validated against
-L</schema> first.  C<where> names the configuration in an error, such as
-C<the check ClaudeMd of the flavor troglodyne>.
-
-=cut
-
+# A new check, whose C<config> is validated against L</schema> first.  The other
+# arguments, such as C<source> and C<variables>, are the attributes of the new
+# check.
+# @param   name    Str      the name of the check in the flavor
+# @param   config  HashRef  optional: the configuration, default empty
+# @param   where   Str      optional: names the configuration in an error, such as
+# C<the check ClaudeMd of the flavor troglodyne>; default C<the check NAME>
+# @returns InstanceOf["Dist::Conformance::Check"]  the check, of the class that it is called on
+# @throws  when the schema refuses the configuration, with the message of
+# L<Dist::Conformance::Schema/"validate($data, $schema, $where)">
+# @example my $check = Dist::Conformance::Check::ClaudeMd->from_config(
+#     name   => 'ClaudeMd',
+#     config => { file => 'CLAUDE.md', mentions => [] },
+#     source => $source,
+# );
 sub from_config ( $class, %arguments ) {
     my $where  = delete $arguments{where} // "the check $arguments{name}";
     my $config = Dist::Conformance::Schema::validate( $arguments{config} // {}, $class->schema, $where );
     return $class->new( %arguments, config => $config );
 }
 
-=method check
-
-C<($snapshot)>.  Returns C<($status, $detail)>: the status is C<pass>, C<fail>
-or C<info>, and the detail is one line for a person.  A subclass must
-implement it.
-
-=cut
-
+# Checks the L<Dist::Conformance::Snapshot> that it is given.  A subclass must
+# implement it.
+# @returns C<($status, $detail)>, as a list: the status is C<pass>, C<fail> or
+# C<info>, and the detail is one line for a person
+# @throws  when the subclass does not implement it
+# @example my ( $status, $detail ) = $check->check($snapshot);
 sub check ( $self, $ ) { die( ref($self) . " does not implement check\n" ) }
 
-=method update
-
-C<($update)>.  Changes the checkout of C<< $update->snapshot >> through the
-L<Dist::Conformance::Update>.  Returns nothing that the caller reads.
-
-The default is for a check that cannot change anything: when L</check> fails,
-it records the detail and that there is no automatic fix.
-
-=cut
-
+# Changes the checkout of C<< $update->snapshot >> through the
+# L<Dist::Conformance::Update>.
+#
+# The default is for a check that cannot change anything: when L</check> fails,
+# it records the detail and that there is no automatic fix.
+# @param   update  InstanceOf["Dist::Conformance::Update"]  what records and writes the changes
+# @returns what the subclass chooses, which no caller reads: L<Dist::Conformance/"update(dry_run)">
+# ignores it.  The default returns nothing.
+# @example $check->update($update);
 sub update ( $self, $update ) {
     my ( $status, $detail ) = $self->check( $update->snapshot );
     $update->by_hand( "$detail: " . $self->name . ' has no automatic fix' ) if $status eq 'fail';
     return;
 }
 
-=method adopt
-
-C<($snapshot)>.  The configuration that would make this check accept the
-repository in C<$snapshot> as it is now, as a hash reference of the keys of
-this check for F<.conformance.yml>, or nothing.  C<conformance adopt> prints
-it, so that a person can record the choices of a repository before an update
-replaces them.  The default is nothing: a check whose configuration has no
-room for the choices of a repository has nothing to adopt.
-
-=cut
-
+# The configuration that would make this check accept the repository in the
+# L<Dist::Conformance::Snapshot> that it is given as it is now, as the keys of
+# this check for F<.conformance.yml>.
+# C<conformance adopt> prints it, so that a person can record the choices of a
+# repository before an update replaces them.  The default is nothing: a check
+# whose configuration has no room for the choices of a repository has nothing to
+# adopt.
+# @returns HashRef  the keys, or nothing
+# @example my $keys = $check->adopt($snapshot);
 sub adopt ( $, $ ) { return }
 
-=method template
-
-C<($path)>.  Returns the template at C<$path> in the source with the variables
-filled in, and then the sorted names of the placeholders that no variable
-fills.  Dies when the source has no such file.
-
-=cut
-
+# The template at C<$path> in the source with the variables filled in, and then
+# the sorted names of the placeholders that no variable fills.
+# @param   path  Str  the path of the template in the source
+# @returns the text, and then the names of the placeholders that are left, as a list
+# @throws  when the source has no such file, with the message of
+# L<Dist::Conformance::Source/"file(relative)">
+# @example my ( $text, @unfilled ) = $check->template('templates/CLAUDE.md');
 sub template ( $self, $path ) {
     my $text      = $self->source->file($path);
     my $variables = $self->variables;
@@ -321,14 +315,16 @@ sub template ( $self, $path ) {
     return ( $text, @unfilled );
 }
 
-=method write_template
-
-C<($update, $path, $template, $mode)>.  Writes the template C<$template> to
-C<$path>, with C<$mode>, through C<$update>.  When a placeholder is left,
-writes nothing and records what is needed.  Returns whether it wrote.
-
-=cut
-
+# Writes the template C<$template> to C<$path>, with C<$mode>, through
+# C<$update>.  When a placeholder is left, writes nothing and records what is
+# needed.
+# @param   update    InstanceOf["Dist::Conformance::Update"]  what writes the file
+# @param   path      Str  the path to write in the checkout
+# @param   template  Str  the path of the template in the source
+# @param   mode      Int  optional: the permissions, default 0644
+# @returns Bool  whether it wrote
+# @throws  when the source has no such template, with the message of L<template|/"template(path)">
+# @example $check->write_template( $update, '.perltidyrc', 'templates/perltidyrc' );
 sub write_template ( $self, $update, $path, $template, $mode = oct 644 ) {
     my ( $text, @unfilled ) = $self->template($template);
     if (@unfilled) {
@@ -338,10 +334,21 @@ sub write_template ( $self, $update, $path, $template, $mode = oct 644 ) {
     return $update->write( $path, $text, $mode );
 }
 
-=method missing
+=method missing($snapshot, @paths)
 
-C<($snapshot, @paths)>.  The paths of C<@paths> that the snapshot does not
-have, in their order.
+The paths of C<@paths> that the snapshot does not have, in their order.
+
+=over 4
+
+=item snapshot - InstanceOf["Dist::Conformance::Snapshot"] - the repository
+
+=item paths - Str - the paths to look for
+
+=back
+
+Returns the missing paths, as a list.
+
+    my @missing = $check->missing( $snapshot, 'dist.ini', 'Changes' );
 
 =cut
 

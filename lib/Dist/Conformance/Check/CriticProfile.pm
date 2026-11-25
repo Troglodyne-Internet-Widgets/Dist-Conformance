@@ -73,6 +73,14 @@ override changes stays on its line, a new parameter goes after the last
 parameter of its section, and a policy that the template does not name goes at
 the end of the file.
 
+The check passes when the profile is the text that the template and the
+overrides make.  It reports C<info> when the profile differs from that text
+only in comments and layout, so that Perl::Critic reads both the same.  It
+fails when the profile is missing, does not parse, or makes Perl::Critic read
+other policies, parameters or settings, and the detail names each difference.
+
+The update writes that text to the profile when the file differs from it.
+
 The check passes when the profile is that text.  It fails when the file is
 missing, and when it differs in what Perl::Critic reads: a policy that it
 lacks, a policy that neither the template nor the overrides name, a policy
@@ -88,7 +96,7 @@ override names it.
 The update writes the text whenever the file differs from it, also in the
 comments.  It replaces whatever the file had, so run C<conformance adopt>
 before the first update of a profile that has changes of its own.  See
-L</adopt>.  A template with a placeholder that nothing fills is not written:
+L<adopt|/"adopt($snapshot)">.  A template with a placeholder that nothing fills is not written:
 the update says which variables it needs.
 
 =head1 CONFIGURATION
@@ -151,10 +159,20 @@ sub config_schema ($) {
     };
 }
 
-=func policy_of
+=func policy_of($section)
 
-C<($section)>.  Whether the header C<$section> of a profile turns its policy
-off, and the short name of the policy.
+Whether the header C<$section> of a profile turns its policy off, and the
+short name of the policy, without C<Perl::Critic::Policy::>.
+
+=over 4
+
+=item section - Str - the header, without its brackets
+
+=back
+
+Returns a boolean and the name, as a list.
+
+    my ( $off, $name ) = policy_of('-Perl::Critic::Policy::Variables::ProhibitPunctuationVars');
 
 =cut
 
@@ -163,13 +181,25 @@ sub policy_of ($section) {
     return ( !!$off, $name );
 }
 
-=func profile_of
+=func profile_of($text, $where)
 
-C<($text, $where)>.  What Perl::Critic reads from the profile C<$text>, as a
-hash reference: C<settings>, the global settings, and C<policies>, from the
-short name of each policy that a section names to a hash reference with C<off>,
-whether it turns the policy off, and C<parameters>.  Dies, naming C<$where>,
-when it does not parse.
+What Perl::Critic reads from the profile C<$text>.
+
+=over 4
+
+=item text - Str - the profile
+
+=item where - Str - names the profile in an error
+
+=back
+
+Returns HashRef, with C<settings>, the global settings, and C<policies>, from
+the short name of each policy that a section names to a hash reference with
+C<off>, whether it turns the policy off, and C<parameters>.
+
+Dies, naming C<$where>, when the text does not parse.
+
+    my $profile = profile_of( "severity = 3\n[-Variables::ProhibitPunctuationVars]\n", '.perlcriticrc' );
 
 =cut
 
@@ -183,11 +213,21 @@ sub profile_of ( $text, $where ) {
     return \%profile;
 }
 
-=func header_of
+=func header_of($line)
 
-C<($line)>.  The section that the line C<$line> of a profile starts, as
-L<Config::Tiny> reads it, with its inline C< ; > comment: C<undef> when it
-starts none.
+The section that the line C<$line> of a profile starts, as L<Config::Tiny>
+reads it, with its inline C< ; > comment.
+
+=over 4
+
+=item line - Str - one line of a profile
+
+=back
+
+Returns Str, the header without its brackets, or C<undef> when the line starts
+no section.
+
+    my $header = header_of("[Variables::ProhibitPunctuationVars] ; a comment\n");
 
 =cut
 
@@ -196,10 +236,21 @@ sub header_of ($line) {
     return $section;
 }
 
-=func parameter_of
+=func parameter_of($line)
 
-C<($line)>.  The key and the value that the line C<$line> of a profile sets, as
-L<Config::Tiny> reads them, or nothing for a line that sets none.
+The key and the value that the line C<$line> of a profile sets, as
+L<Config::Tiny> reads them.
+
+=over 4
+
+=item line - Str - one line of a profile
+
+=back
+
+Returns the key and the value, as a list, or an empty list for a line that
+sets none, such as a comment.
+
+    my ( $key, $value ) = parameter_of("severity = 3\n");
 
 =cut
 
@@ -210,13 +261,25 @@ sub parameter_of ($line) {
     return ( $key, $value );
 }
 
-=func rewrite
+=func rewrite(\@lines, \%overlay)
 
-C<(\@lines, \%overlay)>.  The lines C<@lines> of a section, without its
-header, with the parameters of C<%overlay> over theirs: a key that it sets to
-a value has that value on its line, a key that it sets to C<undef> loses its
-line, and a key that the lines lack gets a line after their last parameter, or
-first when they have none.  The other lines stay as they were.
+The lines C<@lines> of a section, without its header, with the parameters of
+C<%overlay> over theirs: a key that it sets to a value has that value on its
+line, a key that it sets to C<undef> loses its line, and a key that the lines
+lack gets a line after their last parameter, or first when they have none.
+The other lines stay as they were.
+
+=over 4
+
+=item lines - ArrayRef[Str] - the lines of the section, each with its newline
+
+=item overlay - HashRef - from each key to its new value, or to C<undef>
+
+=back
+
+Returns the new lines, as a list.
+
+    my @lines = rewrite( [ "# a comment\n", "max = 3\n" ], { max => 5 } );
 
 =cut
 
@@ -238,13 +301,10 @@ sub rewrite ( $lines, $overlay ) {
     return @out;
 }
 
-=method overrides
-
-The entries of C<overrides>, by the short name of each policy.  Dies on a name
-that is not that of a policy, and on two entries for one policy.
-
-=cut
-
+# The entries of C<overrides>, by the short name of each policy.
+# @returns HashRef  from the name of each policy to C<off> or its parameters
+# @throws  on a name that is not that of a policy, and on two entries for one policy
+# @example my $overrides = $check->overrides;
 sub overrides ($self) {
     my %overrides;
     for my $given ( sort keys %{ $self->config->{overrides} } ) {
@@ -256,14 +316,11 @@ sub overrides ($self) {
     return \%overrides;
 }
 
-=method expected
-
-The text that the profile must be: the template, its placeholders filled in,
-with the overrides and the settings applied, as L</DESCRIPTION> says.  Dies
-when a placeholder has no variable, and when the template does not parse.
-
-=cut
-
+# The text that the profile must be: the template, its placeholders filled in,
+# with the overrides and the settings applied, as L</DESCRIPTION> says.
+# @returns Str  the text of the profile
+# @throws  when a placeholder has no variable, and when the template does not parse
+# @example my $text = $check->expected;
 sub expected ($self) {
     my $template = $self->config->{template};
     my ( $text, @unfilled ) = $self->template($template);
@@ -316,11 +373,22 @@ sub expected ($self) {
     return join q{}, @out;
 }
 
-=func differences
+=func differences($have, $want)
 
-C<($have, $want)>.  How the profile C<$have> differs from C<$want>, both as
-L</profile_of> returns them, as phrases for a person.  Empty when Perl::Critic
-reads both the same.
+How the profile C<$have> differs from C<$want>, as phrases for a person.
+
+=over 4
+
+=item have - HashRef - the profile that the repository has, as L<profile_of|/"profile_of($text, $where)"> returns it
+
+=item want - HashRef - the profile that it must have, as L<profile_of|/"profile_of($text, $where)"> returns it
+
+=back
+
+Returns the phrases, as a list, which is empty when Perl::Critic reads both
+the same.
+
+    my @differences = differences( profile_of( $text, $file ), profile_of( $expected, $template ) );
 
 =cut
 
@@ -348,13 +416,6 @@ sub differences ( $have, $want ) {
     return @differences;
 }
 
-=method check
-
-C<($snapshot)>.  The status and the detail that L</DESCRIPTION> says, for the
-profile in C<$snapshot>.
-
-=cut
-
 sub check ( $self, $snapshot ) {
     my ( $file, $template ) = @{ $self->config }{qw{file template}};
     my $text = $snapshot->content($file) // return ( 'fail', "$file is missing" );
@@ -366,12 +427,6 @@ sub check ( $self, $snapshot ) {
     return ( 'fail', join( '; ', @differences ) . ', which conformance update corrects' );
 }
 
-=method update
-
-Writes L</expected> to the profile when the file differs from it.
-
-=cut
-
 sub update ( $self, $update ) {
     my $want = eval { $self->expected };
     return $update->by_hand( Dist::Conformance::Schema::first_line($@) . ': ' . $self->name . ' cannot write ' . $self->config->{file} ) if !defined $want;
@@ -379,18 +434,29 @@ sub update ( $self, $update ) {
     return;
 }
 
-=method adopt
+=method adopt($snapshot)
 
-C<($snapshot)>.  The C<overrides> and C<settings> that make L</expected> read
-as the profile in C<$snapshot> reads now, as a hash reference with the keys
-that hold something.  Nothing when the profile is missing, or needs neither.
-A policy that the template names and the profile lacks is not adopted: the
-profile lacked it because the template gained it later.  A policy that the
-profile names by the last parts of a name that the template gives in full,
-such as C<ProhibitLeadingZeros> for C<Plicease::ProhibitLeadingZeros>, is the
-policy of the template, as Perl::Critic reads it, and is adopted by the full
-name.  Dies when either does
-not parse, and when a placeholder has no variable.
+The C<overrides> and C<settings> that make L</expected> read as the profile in
+C<$snapshot> reads now.  A policy that the template names and the profile
+lacks is not adopted: the profile lacked it because the template gained it
+later.  A policy that the profile names by the last parts of a name that the
+template gives in full, such as C<ProhibitLeadingZeros> for
+C<Plicease::ProhibitLeadingZeros>, is the policy of the template, as
+Perl::Critic reads it, and is adopted by the full name.
+
+=over 4
+
+=item snapshot - InstanceOf["Dist::Conformance::Snapshot"] - the repository
+
+=back
+
+Returns HashRef or undef: the keys that hold something, C<undef> when the
+profile needs neither key, and nothing when the profile is missing.
+
+Dies when either the profile or the template does not parse, and when a
+placeholder has no variable.
+
+    my $keys = $check->adopt($snapshot);
 
 =cut
 
@@ -423,11 +489,22 @@ sub adopt ( $self, $snapshot ) {
     return %adopted ? \%adopted : undef;
 }
 
-=func full_name
+=func full_name($name, \%policies)
 
-C<($name, \%policies)>.  The name in C<%policies> that ends with C<::$name>,
-when C<$name> is not a key there and exactly one name ends so.  C<$name>
-otherwise.
+The name in C<%policies> that ends with C<::$name>, when C<$name> is not a key
+there and exactly one name ends so.
+
+=over 4
+
+=item name - Str - the name of a policy, maybe its last parts only
+
+=item policies - HashRef - keyed by the names of the policies of a profile
+
+=back
+
+Returns Str, that name, or else C<$name>.
+
+    my $name = full_name( 'ProhibitLeadingZeros', $profile->{policies} );
 
 =cut
 
@@ -437,11 +514,22 @@ sub full_name ( $name, $policies ) {
     return @longer == 1 ? $longer[0] : $name;
 }
 
-=func overlay
+=func overlay(\%from, \%to)
 
-C<(\%from, \%to)>.  The overlay that turns the parameters C<%from> into C<%to>:
-each key of C<%to> whose value differs, and C<undef> for each key that only
-C<%from> has.
+The overlay that turns the parameters C<%from> into C<%to>: each key of
+C<%to> whose value differs, and C<undef> for each key that only C<%from> has.
+
+=over 4
+
+=item from - HashRef - the parameters to start from
+
+=item to - HashRef - the parameters to end with
+
+=back
+
+Returns HashRef, the overlay, as L<rewrite|/"rewrite(\@lines, \%overlay)"> takes it.
+
+    my $overlay = overlay( { max => 3, min => 1 }, { max => 5 } );
 
 =cut
 

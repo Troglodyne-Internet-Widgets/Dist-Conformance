@@ -51,21 +51,11 @@ sub config_schema ($) {
     };
 }
 
-=method check
-
-=cut
-
 sub check ( $self, $snapshot ) {
     my @missing = $self->missing( $snapshot, sort keys %{ $self->config->{files} } );
     return ( 'fail', 'missing: ' . join ', ', @missing ) if @missing;
     return ( 'pass', 'all present' );
 }
-
-=method update
-
-Writes each missing file from its template.
-
-=cut
 
 sub update ( $self, $update ) {
     my $files = $self->config->{files};

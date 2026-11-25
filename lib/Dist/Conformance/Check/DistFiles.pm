@@ -64,21 +64,11 @@ sub config_schema ($class) {
     };
 }
 
-=method check
-
-=cut
-
 sub check ( $self, $snapshot ) {
     my $marker = $self->config->{marker};
     return ( $self->config->{absent}, "no $marker" ) if !$snapshot->contains($marker);
     return $self->SUPER::check($snapshot);
 }
-
-=method update
-
-Does nothing without the marker.
-
-=cut
 
 sub update ( $self, $update ) {
     return if !$update->snapshot->contains( $self->config->{marker} );

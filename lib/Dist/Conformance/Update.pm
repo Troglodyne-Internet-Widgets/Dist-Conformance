@@ -55,9 +55,21 @@ has dry_run => 0;
 has changes => sub { [] };
 has manual  => sub { [] };
 
-=method new
+=method new(@args)
+
+A new update.
+
+=over 4
+
+=item args - Hash - the attributes, such as L</snapshot> and L</dry_run>, as named arguments
+
+=back
+
+Returns a Dist::Conformance::Update object.
 
 Dies unless L</snapshot> is writable.
+
+    my $update = Dist::Conformance::Update->new( snapshot => $snapshot, dry_run => 1 );
 
 =cut
 
@@ -68,15 +80,16 @@ sub new ( $class, @args ) {
     return $self;
 }
 
-=method write
-
-C<($path, $bytes, $mode)>.  Writes C<$bytes> to C<$path> in the snapshot, with
-C<$mode>, default 0644, and records a C<create> or a C<replace>.  A file that
-already has these bytes is left alone, and nothing is recorded, so a second
-update after the first has nothing to do.
-
-=cut
-
+# Writes C<$bytes> to C<$path> in the snapshot, with C<$mode>, and records a
+# C<create> or a C<replace>.  A file that already has these bytes is left alone,
+# and nothing is recorded, so a second update after the first has nothing to do.
+# @param   path   Str  the path, relative to the top of the checkout
+# @param   bytes  Str  the content
+# @param   mode   Int  optional: the permissions, default 0644
+# @returns Bool  whether it recorded a change
+# @throws  when the snapshot cannot write the file, as
+# L<Dist::Conformance::Snapshot::Directory/"write(path, bytes, mode)"> says
+# @example $update->write( '.perltidyrc', "-l=400\n" );
 sub write ( $self, $path, $bytes, $mode = oct 644 ) {    ## no critic (Subroutines::ProhibitBuiltinHomonyms) -- a method, never called as the builtin
     my $snapshot = $self->snapshot;
     my $old      = $snapshot->content($path);
@@ -86,15 +99,16 @@ sub write ( $self, $path, $bytes, $mode = oct 644 ) {    ## no critic (Subroutin
     return 1;
 }
 
-=method install_hook
-
-C<($name, $bytes)>.  Installs C<$bytes> as the git hook C<$name> of the
-checkout, and records an C<install> of the hook's path, unless the hook that is
-installed has these bytes already.  When the snapshot is not a git checkout, it
-records a line for L</manual> instead.
-
-=cut
-
+# Installs C<$bytes> as the git hook C<$name> of the checkout, and records an
+# C<install> of the hook's path, unless the hook that is installed has these
+# bytes already.  When the snapshot is not a git checkout, it records a line for
+# L</manual> instead.
+# @param   name   Str  the name of the hook, such as C<pre-commit>
+# @param   bytes  Str  the content of the hook
+# @returns Bool  whether it recorded an C<install>
+# @throws  when the snapshot cannot install the hook, as
+# L<Dist::Conformance::Snapshot::Directory/"install_hook(name, bytes)"> says
+# @example $update->install_hook( 'pre-commit', $bytes );
 sub install_hook ( $self, $name, $bytes ) {
     my $snapshot = $self->snapshot;
     my $dir      = $snapshot->hooks_dir;
@@ -110,10 +124,19 @@ sub install_hook ( $self, $name, $bytes ) {
     return 1;
 }
 
-=method by_hand
+=method by_hand(@sentences)
 
-C<(@sentences)>.  Records what a person has to do, because no check can do it
-safely.
+Records what a person has to do, because no check can do it safely.
+
+=over 4
+
+=item sentences - Array - the sentences for a person
+
+=back
+
+Returns nothing.
+
+    $update->by_hand('Write the prose of CLAUDE.md');
 
 =cut
 

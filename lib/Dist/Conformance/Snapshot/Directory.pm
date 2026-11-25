@@ -31,8 +31,8 @@ commit.  Nothing is cached, so a check that runs after an update sees what the
 update wrote.
 
 L</paths> walks the whole tree except each F<.git>, and hashes every file.
-L<Dist::Conformance::Snapshot/contains>, L<Dist::Conformance::Snapshot/sha> and
-L</content> look at one file only.
+L<Dist::Conformance::Snapshot/"contains(path)">, L<Dist::Conformance::Snapshot/"sha(path)"> and
+L<content|/"content($path)"> look at one file only.
 
 Every path that this class takes is relative to L</root>.  It dies on an
 absolute path and on a path with a C<..> component, so that a flavor cannot
@@ -52,9 +52,21 @@ my sub bytes_at ($name) {
     return Mojo::File->new($name)->slurp;
 }
 
-=method new
+=method new(@args)
+
+A new snapshot, whose L</root> becomes a L<Mojo::File>.
+
+=over 4
+
+=item args - Hash - the attributes, such as L</root>, as named arguments
+
+=back
+
+Returns a Dist::Conformance::Snapshot::Directory object.
 
 Dies unless L</root> is a directory.
+
+    my $snapshot = Dist::Conformance::Snapshot::Directory->new( root => '/bogus/checkout' );
 
 =cut
 
@@ -66,13 +78,11 @@ sub new ( $class, @args ) {
     return $self;
 }
 
-=method file
-
-C<($path)>.  The L<Mojo::File> of C<$path> under the root.  Dies on a path
-that leaves the root.
-
-=cut
-
+# The L<Mojo::File> of C<$path> under the root.
+# @param   path  Str  the path, relative to the root
+# @returns InstanceOf["Mojo::File"]  the file, which may not exist
+# @throws  on a path that leaves the root, as L<Dist::Conformance::Schema/"relative_path($path, $inside)"> says
+# @example my $file = $snapshot->file('CLAUDE.md');
 sub file ( $self, $path ) {
     Dist::Conformance::Schema::relative_path( $path, 'the checkout' );
     return $self->root->child( split m{/}, $path );
@@ -82,6 +92,10 @@ sub file ( $self, $path ) {
 
 Every file and symbolic link below the root, except inside F<.git>, with its
 blob SHA.  A symbolic link is hashed as git hashes it, by its target.
+
+Returns HashRef, from each path to its blob SHA.
+
+    my $paths = $snapshot->paths;
 
 =cut
 
@@ -107,9 +121,21 @@ sub paths ($self) {
     return \%paths;
 }
 
-=method contains
+=method contains($path)
 
-C<($path)>.  Whether C<$path> is a file or a symbolic link.
+Whether C<$path> is a file or a symbolic link.
+
+=over 4
+
+=item path - Str - the path
+
+=back
+
+Returns Bool.
+
+Dies on a path that leaves the root.
+
+    say 'has a profile' if $snapshot->contains('.perlcriticrc');
 
 =cut
 
@@ -118,9 +144,21 @@ sub contains ( $self, $path ) {
     return -l $file || ( -e _ && !-d _ );
 }
 
-=method sha
+=method sha($path)
 
-C<($path)>.  The blob SHA of the one file, or C<undef>.
+The blob SHA of the one file.
+
+=over 4
+
+=item path - Str - the path
+
+=back
+
+Returns Str or undef: the SHA, or C<undef> when there is no such file.
+
+Dies on a path that leaves the root.
+
+    my $sha = $snapshot->sha('git-hooks/pre-commit');
 
 =cut
 
@@ -129,10 +167,21 @@ sub sha ( $self, $path ) {
     return Dist::Conformance::Snapshot::blob_sha( bytes_at( $self->file($path) ) );
 }
 
-=method content
+=method content($path)
 
-C<($path)>.  The bytes of the file, or C<undef>.  For a symbolic link, the
-bytes of what it points at.
+The bytes of the file.  For a symbolic link, the bytes of what it points at.
+
+=over 4
+
+=item path - Str - the path
+
+=back
+
+Returns Str or undef: the bytes, or C<undef> when there is no such file.
+
+Dies on a path that leaves the root.
+
+    my $text = $snapshot->content('CLAUDE.md');
 
 =cut
 
@@ -146,18 +195,22 @@ sub content ( $self, $path ) {
 
 True.
 
+Returns Bool.
+
+    my $update = Dist::Conformance::Update->new( snapshot => $snapshot, dry_run => !$snapshot->writable );
+
 =cut
 
 sub writable ($) { return 1 }
 
-=method write
-
-C<($path, $bytes, $mode)>.  Writes C<$bytes> to C<$path> through a temporary
-file and a rename, so that no reader sees half a file.  Makes the missing
-directories.  C<$mode> defaults to 0644.
-
-=cut
-
+# Writes C<$bytes> to C<$path> through a temporary file and a rename, so that no
+# reader sees half a file.  Makes the missing directories.
+# @param   path   Str  the path, relative to the root
+# @param   bytes  Str  the content
+# @param   mode   Int  optional: the permissions, default 0644
+# @returns InstanceOf["Mojo::File"]  the file that it wrote
+# @throws  on a path that leaves the root, and when it cannot write the file or set its mode
+# @example $snapshot->write( '.perltidyrc', "-l=400\n" );
 sub write ( $self, $path, $bytes, $mode = oct 644 ) {    ## no critic (Subroutines::ProhibitBuiltinHomonyms) -- the method of a writable snapshot, never called as the builtin
     my $file = $self->file($path);
     $file->dirname->make_path;
@@ -166,20 +219,18 @@ sub write ( $self, $path, $bytes, $mode = oct 644 ) {    ## no critic (Subroutin
     return $file;
 }
 
-=method hooks_dir
-
-The directory that git runs the hooks of this checkout from, or C<undef> when
-the root is not a checkout.  That is what C<git rev-parse --git-path hooks>
-answers in the root: F<.git/hooks>, or in a worktree the F<hooks> of the main
-checkout, unless C<core.hooksPath> names another directory.  A relative
-C<core.hooksPath> is relative to the root, so a C<core.hooksPath> of
-F<git-hooks> makes each worktree run the hooks that its own branch tracks.  It
-dies with the error of git when git finds no repository in a root that has a
-F<.git>.  It needs git 2.10 or later, the first whose C<--git-path> honors
-C<core.hooksPath>.
-
-=cut
-
+# The directory that git runs the hooks of this checkout from.  That is what
+# C<git rev-parse --git-path hooks> answers in the root: F<.git/hooks>, or in a
+# worktree the F<hooks> of the main checkout, unless C<core.hooksPath> names
+# another directory.  A relative C<core.hooksPath> is relative to the root, so a
+# C<core.hooksPath> of F<git-hooks> makes each worktree run the hooks that its
+# own branch tracks.  It needs git 2.10 or later, the first whose C<--git-path>
+# honors C<core.hooksPath>.
+# @returns InstanceOf["Mojo::File"]|Undef  the directory, or C<undef> when the root
+# has no F<.git>
+# @throws  with the error of git when git finds no repository in a root that has
+# a F<.git>
+# @example my $hooks = $snapshot->hooks_dir;
 sub hooks_dir ($self) {
     my $root = $self->root;
     return undef if !-e $root->child('.git');
@@ -193,25 +244,24 @@ sub hooks_dir ($self) {
     return $hooks->is_abs ? $hooks : $root->child($path);
 }
 
-=method installed_hook
-
-C<($name)>.  The bytes of the hook C<$name> that git runs now, or C<undef>.
-
-=cut
-
+# The bytes of the hook C<$name> that git runs now.
+# @param   name  Str  the name of the hook, such as C<pre-commit>
+# @returns Str|Undef  the bytes, or C<undef> when the hook or the checkout is not there
+# @throws  as L</hooks_dir> does
+# @example my $bytes = $snapshot->installed_hook('pre-commit');
 sub installed_hook ( $self, $name ) {
     my $dir  = $self->hooks_dir // return undef;
     my $hook = $dir->child($name);
     return -e $hook ? $hook->slurp : undef;
 }
 
-=method install_hook
-
-C<($name, $bytes)>.  Writes the hook C<$name> into L</hooks_dir>, executable.
-Dies when the root is not a checkout.
-
-=cut
-
+# Writes the hook C<$name> into L</hooks_dir>, executable.
+# @param   name   Str  the name of the hook, such as C<pre-commit>
+# @param   bytes  Str  the content of the hook
+# @returns InstanceOf["Mojo::File"]  the hook that it wrote
+# @throws  when the name is not that of a hook, when the root is not a checkout,
+# and when it cannot write the hook or make it executable
+# @example $snapshot->install_hook( 'pre-commit', $bytes );
 sub install_hook ( $self, $name, $bytes ) {
     die "$name is not a hook name\n" if $name !~ m{\A[[:lower:]][[:lower:]-]*\z};
     my $dir = $self->hooks_dir // die( $self->root . " is not a git checkout\n" );

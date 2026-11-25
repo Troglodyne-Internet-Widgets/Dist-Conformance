@@ -42,9 +42,21 @@ called at most once per path, and only for a path in L</paths>.
 has 'paths';
 has 'fetch';
 
-=method new
+=method new(@args)
 
-Dies unless L</paths> is a hash and L</fetch> is code.
+A new snapshot.
+
+=over 4
+
+=item args - Hash - the attributes, L</paths> and L</fetch>, as named arguments
+
+=back
+
+Returns a Dist::Conformance::Snapshot::Tree object.
+
+Dies unless L</paths> is a hash reference and L</fetch> is a code reference.
+
+    my $snapshot = Dist::Conformance::Snapshot::Tree->new( paths => \%paths, fetch => sub ($path) { $blobs{$path} } );
 
 =cut
 
@@ -55,10 +67,20 @@ sub new ( $class, @args ) {
     return $self;
 }
 
-=method content
+=method content($path)
 
-C<($path)>.  The bytes from L</fetch>, memoized for the life of the object;
-C<undef> for a path that the tree does not list.
+The bytes from L</fetch>, memoized for the life of the object.
+
+=over 4
+
+=item path - Str - the path
+
+=back
+
+Returns Str or undef: the bytes, or C<undef> for a path that the tree does not
+list.
+
+    my $text = $snapshot->content('CLAUDE.md');
 
 =cut
 

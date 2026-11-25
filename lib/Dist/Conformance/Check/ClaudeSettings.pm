@@ -67,34 +67,26 @@ sub config_schema ($) {
     };
 }
 
-=method settings
-
-C<($snapshot)>.  The parsed settings, C<undef> when the file is absent.  Dies
-when it does not parse.
-
-=cut
-
+# The parsed settings of C<file> in the snapshot.
+# @param   snapshot  InstanceOf["Dist::Conformance::Snapshot"]  the repository
+# @returns HashRef|Undef  the settings, or C<undef> when the file is absent
+# @throws  when the file does not parse as a JSON object
+# @example my $settings = $check->settings($snapshot);
 sub settings ( $self, $snapshot ) {
     my $file = $self->config->{file};
     my $text = $snapshot->content($file) // return undef;
     return Dist::Conformance::Schema::parse_json( $text, $file );
 }
 
-=method disabled
-
-C<($settings)>.  The plugins that C<$settings> does not enable.
-
-=cut
-
+# The plugins of C<plugins> that the settings do not enable, in their order.
+# @param   settings  HashRef  the parsed settings, as L<settings|/"settings(snapshot)"> returns them
+# @returns the names of the plugins, as a list
+# @example my @disabled = $check->disabled( $check->settings($snapshot) // {} );
 sub disabled ( $self, $settings ) {
     my $enabled  = ref $settings->{enabledPlugins} eq 'HASH' ? $settings->{enabledPlugins} : {};
     my @disabled = grep { !$enabled->{$_} } @{ $self->config->{plugins} };
     return @disabled;
 }
-
-=method check
-
-=cut
 
 sub check ( $self, $snapshot ) {
     my ( $file, $missing ) = @{ $self->config }{qw{file missing}};
@@ -105,12 +97,6 @@ sub check ( $self, $snapshot ) {
     return ( $missing, 'does not enable ' . join ', ', @disabled ) if @disabled;
     return ( 'pass',   'enables ' . join ', ',         @{ $self->config->{plugins} } );
 }
-
-=method update
-
-Writes the settings, or enables the plugins in them.
-
-=cut
 
 sub update ( $self, $update ) {
     my $settings = eval { $self->settings( $update->snapshot ) };
