@@ -4,7 +4,7 @@ Dist::Conformance - Whether the development harness of a repository conforms to 
 
 # VERSION
 
-version 0.008
+version 0.009
 
 # SYNOPSIS
 
@@ -65,7 +65,7 @@ The program [conformance](https://metacpan.org/pod/conformance) runs all of this
 
 ## root
 
-The directory of a checkout.  Required unless ["snapshot"](#snapshot) is given; ["update"](#update)
+The directory of a checkout.  Required unless ["snapshot"](#snapshot) is given; [update](#update-dry_run)
 needs it.
 
 ## snapshot
@@ -78,7 +78,7 @@ is not on this machine, pass a [Dist::Conformance::Snapshot::Tree](https://metac
 
 The validated `.conformance.yml`.  Default the file of the snapshot.  A caller
 that has the configuration from somewhere else passes it through
-["validate" in Dist::Conformance::Config](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3AConfig#validate).
+["validate($data)" in Dist::Conformance::Config](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3AConfig#validate-data).
 
 ## cache
 
@@ -103,66 +103,111 @@ the attributes above.
 
 The [Dist::Conformance::Flavor](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3AFlavor), loaded from the source.
 
+# FUNCTIONS
+
+## failed($results)
+
+Whether any result of ["check"](#check) failed.
+
+- results - ArrayRef\[HashRef\] - the results, as ["check"](#check) returns them
+
+Returns Bool, true when the status of a result is `fail`.
+
+```
+exit 1 if Dist::Conformance::failed( $conformance->check );
+```
+
 # METHODS
-
-## build\_source
-
-The source that the `source` key of the configuration describes, with
-["standards"](#standards), ["cache"](#cache) and ["offline"](#offline) applied.
-
-## skipped
-
-The names of the checks that `.conformance.yml` skips, as a hash reference.
-Dies when it skips or configures a check that the flavor does not run.
-
-## checks
-
-The [Dist::Conformance::Check](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ACheck) objects that run, in order, with the
-configuration of the flavor and of `.conformance.yml` merged and validated.
-Memoized.  Dies on a check whose module does not load or is not a check, and on
-a configuration that its schema refuses; each message names the check and the
-flavor.
-
-## make\_check
-
-`($name, $config, \%variables)`.  The check `$name` of the flavor, from its
-merged configuration.
-
-## check
-
-Runs every check of the flavor against the snapshot.  Returns an array
-reference of hash references, one for each check of the flavor, in the order of
-their names: `check`, the name; `status`, which is `pass`, `fail`, `info`,
-or `skip` for a check that `.conformance.yml` skips; and `detail`.
-
-A check that dies, or returns a status that is not one of the three, fails, and
-its detail says so.  A failure of a check at `level: info` is reported as
-`info`.
-
-## update
-
-`(%options)`.  Runs the update of every check that is not skipped on the
-checkout, after fetching the standards when the source is git.  With
-`dry_run => 1` it writes nothing, and says what it would write.
-
-Returns an array reference of hash references, one for each check that ran, in
-order: `check`, the name; `changes`, what it changed or would change, each
-with an `action` and a `path`; and `manual`, what is left for a person.  A
-check whose update dies has the error in `manual`, and the other checks still
-run.
 
 ## adopt
 
-Asks every check that is not skipped what configuration would accept the
-checkout as it is now, through ["adopt" in Dist::Conformance::Check](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ACheck#adopt).  Returns a
-hash reference from the name of each check that has an answer to the answer,
-which is what the check would take under `checks` in `.conformance.yml`.
+Asks every check that is not skipped what configuration would accept the checkout as it is now, through ["adopt" in Dist::Conformance::Check](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ACheck#adopt).
 
-# FUNCTIONS
+Returns HashRef, from the name of each check that has an answer to the answer, which is what the check would take under `checks` in `.conformance.yml`.
 
-## failed
+Dies when the checks cannot be made, as ["checks"](#checks) says, and when the adopt of a check dies.
 
-`($results)`.  Whether any result of ["check"](#check) failed.
+```perl
+my $adopted = $conformance->adopt;
+```
+
+## build\_source
+
+The source that the `source` key of the configuration describes, with ["standards"](#standards), ["cache"](#cache) and ["offline"](#offline) applied: a directory for ["standards"](#standards) or for `directory`, and else a git repository.
+
+Returns a Dist::Conformance::Source object, the new source.
+
+```perl
+my $source = $conformance->build_source;
+```
+
+## check
+
+Runs every check of the flavor against the snapshot.
+
+A check that dies, or returns a status that is not one of the three, fails, and its detail says so.  A failure of a check at `level: info` is reported as `info`.
+
+Returns ArrayRef, of hash references, one for each check of the flavor, in the order of their names: `check`, the name; `status`, which is `pass`, `fail`, `info`, or `skip` for a check that `.conformance.yml` skips; and `detail`.
+
+Dies when the checks cannot be made, as ["checks"](#checks) says.
+
+```perl
+my $results = $conformance->check;
+```
+
+## checks
+
+The [Dist::Conformance::Check](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ACheck) objects that run, in order, with the configuration of the flavor and of `.conformance.yml` merged and validated. Memoized.
+
+Returns ArrayRef\[InstanceOf\["Dist::Conformance::Check"\]\], the checks.
+
+Dies on a check whose module does not load or is not a check, and on a configuration that its schema refuses; each message names the check and the flavor.
+
+```perl
+say $_->name for @{ $conformance->checks };
+```
+
+## make\_check(name, config, variables)
+
+The check `$name` of the flavor, from its merged configuration.
+
+- name - Str - the name of the check in the flavor
+- config - HashRef - its merged configuration, with `module` when the module is not the name
+- variables - HashRef - the values of the placeholders of the templates
+
+Returns a Dist::Conformance::Check object, the check.
+
+Dies when the module of the check is not the name of a module, does not load, or is not a [Dist::Conformance::Check](https://metacpan.org/pod/Dist%3A%3AConformance%3A%3ACheck), and when the schema of the check refuses the configuration.
+
+```perl
+my $check = $conformance->make_check( 'ClaudeMd', { file => 'CLAUDE.md', mentions => [] }, {} );
+```
+
+## skipped
+
+The names of the checks that `.conformance.yml` skips.
+
+Returns HashRef, from the name of each skipped check to 1.
+
+Dies when `.conformance.yml` skips or configures a check that the flavor does not run, with a message that starts with `.conformance.yml is not valid:`.
+
+```perl
+my $skipped = $conformance->skipped;
+```
+
+## update(dry\_run)
+
+Runs the update of every check that is not skipped on the checkout, after fetching the standards when the source is git.  A check whose update dies has the error in `manual`, and the other checks still run.
+
+- dry\_run - Bool - optional: when true, writes nothing, and says what it would write
+
+Returns ArrayRef, of hash references, one for each check that ran, in order: `check`, the name; `changes`, what it changed or would change, each with an `action` and a `path`; and `manual`, what is left for a person.
+
+Dies when the checks cannot be made, as ["checks"](#checks) says.
+
+```perl
+my $results = $conformance->update( dry_run => 1 );
+```
 
 # SEE ALSO
 
