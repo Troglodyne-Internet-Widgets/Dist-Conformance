@@ -145,6 +145,16 @@ update removes each one.
 F<dist.ini> asks for each authordep of its template, at the version of the
 template or later, and the update raises or adds each one.
 
+=item L<Dist::Conformance::Check::IniTemplate>
+
+An INI file, such as F<weaver.ini>, is its template with the overrides of the
+repository, and the update writes it.
+
+=item L<Dist::Conformance::Check::DistIni>
+
+F<dist.ini> is its template with the overrides of the repository, its
+authordeps included.
+
 =item L<Dist::Conformance::Check::ClaudeSettings>
 
 F<.claude/settings.json> enables the plugins.

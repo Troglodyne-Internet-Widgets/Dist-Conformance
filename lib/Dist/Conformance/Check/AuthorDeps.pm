@@ -146,7 +146,7 @@ sub wanted ( $self, $snapshot ) {
     my ($text)    = $self->template( $config->{template} );
     my @lines     = split /^/, $text;
     my @named     = ( ( map { $_->{module} } authordeps_of($text) ), keys %$overrides );
-    my %seen      = map { $_ => 1 } grep { local ($_) = $_; $snapshot->contains( 'lib/' . s{::}{/}gr . '.pm' ) } @named;
+    my %seen      = map { $_ => 1 } grep { local ($_) = $_; own_module( $snapshot, $_ ) } @named;
     my @wanted;
     for my $dep ( authordeps_of($text) ) {
         my $module = $dep->{module};
@@ -160,6 +160,79 @@ sub wanted ( $self, $snapshot ) {
         push @wanted, authordep_line( $module, $overrides->{$module} );
     }
     return @wanted;
+}
+
+# Whether the repository in C<$snapshot> has the module C<$module> under
+# F<lib/>, so that it builds with its own copy.
+# @param   snapshot  InstanceOf["Dist::Conformance::Snapshot"]  the repository, or undef for none
+# @param   module    Str  the name of the module
+# @returns Bool
+# @example my $own = own_module( $snapshot, 'Foo::Bar' );
+sub own_module ( $snapshot, $module ) {
+    return 0 if !$snapshot;
+    return $snapshot->contains( 'lib/' . ( $module =~ s{::}{/}gr ) . '.pm' ) ? 1 : 0;
+}
+
+# The text C<$text> with its authordeps as C<$overrides> says, exactly: a
+# module that is C<off>, or that the repository in C<$snapshot> has under
+# F<lib/>, loses its lines; a version replaces that of the lines; and a module
+# that the text lacks gets a line after its last authordep line, or at its end.
+# Every other line stays as it was.
+# @param   text       Str      the text of the file
+# @param   overrides  HashRef  from the name of a module to C<off> or a version
+# @param   snapshot   InstanceOf["Dist::Conformance::Snapshot"]  optional: the repository
+# @returns Str  the new text
+# @example my $text = with_overrides( $template, { 'Foo::Bar' => '1.2' }, $snapshot );
+sub with_overrides ( $text, $overrides, $snapshot = undef ) {
+    my @lines = split /^/, $text;
+    my ( %seen, %drop );
+    for my $dep ( authordeps_of($text) ) {
+        my $module   = $dep->{module};
+        my $override = $overrides->{$module};
+        $seen{$module} = 1;
+        if ( own_module( $snapshot, $module ) || ( defined $override && $override eq 'off' ) ) {
+            $drop{ $dep->{line} } = 1;
+            next;
+        }
+        next if !defined $override;
+        my $line = \$lines[ $dep->{line} ];
+        if ( defined $dep->{from} ) {
+            substr $$line, $dep->{from}, $dep->{to} - $dep->{from}, $override;
+        }
+        else {
+            substr $$line, $dep->{after}, 0, " = $override";
+        }
+    }
+    my @add = map { authordep_line( $_, $overrides->{$_} )->{text} } grep { !$seen{$_} && $overrides->{$_} ne 'off' && !own_module( $snapshot, $_ ) } sort keys %$overrides;
+    my @kept;
+    my $last;
+    for my $index ( 0 .. $#lines ) {
+        next if $drop{$index};
+        push @kept, $lines[$index];
+        $last = $#kept if $lines[$index] =~ m/\A\s*;\s*authordep\s/;
+    }
+    if (@add) {
+        my $after = $last // $#kept;
+        $kept[$after] .= "\n" if $after >= 0 && $kept[$after] !~ m/\n\z/;
+        splice @kept, $after + 1, 0, @add;
+    }
+    return join q{}, @kept;
+}
+
+# How the authordeps of the text C<$have> differ from those of C<$want>, as
+# phrases for a person.
+# @param   have  Str  the text that the repository has
+# @param   want  Str  the text that it must have
+# @returns the phrases, as a list, which is empty when both ask for the same
+# @example my @differences = authordep_differences( $text, $expected );
+sub authordep_differences ( $have, $want ) {
+    my %have = map { $_->{module} => $_->{version} } authordeps_of($have);
+    my %want = map { $_->{module} => $_->{version} } authordeps_of($want);
+    return (
+        ( map { "lacks the authordep $_ $want{$_}" } grep { !exists $have{$_} } sort keys %want ),
+        ( map { "asks for $_ $have{$_}, not $want{$_}" } grep { exists $have{$_} && $have{$_} ne $want{$_} } sort keys %want ),
+        ( map { "has the authordep $_, which neither the template nor the overrides name" } grep { !exists $want{$_} } sort keys %have ),
+    );
 }
 
 # The authordep of C<$module> at C<$version>, and its line.
