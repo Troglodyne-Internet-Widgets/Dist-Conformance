@@ -140,6 +140,11 @@ A JSON, YAML or INI file, such as F<.perl-slop.json>, matches a schema.
 An INI file, such as F<dist.ini>, sets no key that the flavor refuses, and the
 update removes each one.
 
+=item L<Dist::Conformance::Check::AuthorDeps>
+
+F<dist.ini> asks for each authordep of its template, at the version of the
+template or later, and the update raises or adds each one.
+
 =item L<Dist::Conformance::Check::ClaudeSettings>
 
 F<.claude/settings.json> enables the plugins.
