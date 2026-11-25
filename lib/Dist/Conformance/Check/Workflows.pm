@@ -53,21 +53,16 @@ sub config_schema ($) {
     };
 }
 
-=method missing_workflows
-
-C<($snapshot)>.  The required workflows that the snapshot does not have.
-
-=cut
-
+# The required workflows that the snapshot does not have, by their file names,
+# in sorted order.
+# @param   snapshot  InstanceOf["Dist::Conformance::Snapshot"]  the repository
+# @returns the file names, as a list
+# @example my @missing = $check->missing_workflows($snapshot);
 sub missing_workflows ( $self, $snapshot ) {
     my ( $directory, $required ) = @{ $self->config }{qw{directory required}};
     my @missing = grep { local ($_) = $_; !$snapshot->contains("$directory/$_") } sort keys %$required;
     return @missing;
 }
-
-=method check
-
-=cut
 
 sub check ( $self, $snapshot ) {
     my ( $directory, $required ) = @{ $self->config }{qw{directory required}};
@@ -79,12 +74,6 @@ sub check ( $self, $snapshot ) {
     return ( 'fail', 'missing: ' . join ', ', map { "$directory/$_" } @missing ) if @missing;
     return ( 'pass', 'all present' );
 }
-
-=method update
-
-Writes each missing workflow from its template.
-
-=cut
 
 sub update ( $self, $update ) {
     my ( $directory, $required ) = @{ $self->config }{qw{directory required}};

@@ -51,43 +51,34 @@ of the tree.
 
 has path => q{};
 
-=method root
-
-The directory of the whole tree, as a L<Mojo::File>.  A subclass must
-implement it.
-
-=cut
-
+# The directory of the whole tree.  A subclass must implement it.
+# @returns InstanceOf["Mojo::File"]  the directory
+# @throws  when the subclass does not implement it
+# @example my $top = $source->root;
 sub root ($self) { die( ref($self) . " does not implement root\n" ) }
 
-=method describe
-
-A short description of the source for a message, such as the URL and the ref.
-A subclass must implement it.
-
-=cut
-
+# A short description of the source for a message, such as the URL and the ref.
+# A subclass must implement it.
+# @returns Str  the description
+# @throws  when the subclass does not implement it
+# @example say 'Flavor from ', $source->describe;
 sub describe ($self) { die( ref($self) . " does not implement describe\n" ) }
 
-=method base
-
-The directory that L</path> names, as a L<Mojo::File>.
-
-=cut
-
+# The directory that L</path> names.
+# @returns InstanceOf["Mojo::File"]  the directory
+# @throws  as L</root> does
+# @example my $standards = $source->base;
 sub base ($self) {
     my $root = $self->root;
     return $self->path ne q{} ? $root->child( split m{/}, $self->path ) : $root;
 }
 
-=method file
-
-C<($relative)>.  The bytes of the file at C<$relative> below L</base>.  Dies when
-there is no such file, and on an absolute path or a path with a C<..>
-component.
-
-=cut
-
+# The bytes of the file at C<$relative> below L</base>.
+# @param   relative  Str  the path of the file, relative to L</base>
+# @returns Str  the bytes
+# @throws  when there is no such file, and on an absolute path or a path with a
+# C<..> component
+# @example my $flavor_text = $source->file('conformance/troglodyne.yml');
 sub file ( $self, $relative ) {
     Dist::Conformance::Schema::relative_path( $relative, 'the standards' );
     my $file = $self->base->child( split m{/}, $relative );
@@ -95,12 +86,11 @@ sub file ( $self, $relative ) {
     return $file->slurp;
 }
 
-=method exists_file
-
-C<($relative)>.  Whether L</file> would find C<$relative>.
-
-=cut
-
+# Whether L<file|/"file(relative)"> would find C<$relative>.
+# @param   relative  Str  the path of the file, relative to L</base>
+# @returns Bool
+# @throws  as L</root> does
+# @example my $has = $source->exists_file('templates/perlcriticrc');
 sub exists_file ( $self, $relative ) {
     my $file = $self->base->child( split m{/}, $relative );
     return -e $file && !-d _;

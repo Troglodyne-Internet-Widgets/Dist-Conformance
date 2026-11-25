@@ -131,11 +131,22 @@ our %SCHEMA = (
     },
 );
 
-=func load
+=func load($snapshot)
 
-C<($snapshot)>.  The validated F<.conformance.yml> of the snapshot, with the
-defaults filled in.  Dies when the file is missing, does not parse or is not
-valid.
+The validated F<.conformance.yml> of the snapshot, with the defaults filled
+in.
+
+=over 4
+
+=item snapshot - InstanceOf["Dist::Conformance::Snapshot"] - the repository
+
+=back
+
+Returns HashRef, the configuration.
+
+Dies when the file is missing, does not parse or is not valid.
+
+    my $config = Dist::Conformance::Config::load($snapshot);
 
 =cut
 
@@ -144,10 +155,23 @@ sub load ($snapshot) {
     return validate( Dist::Conformance::Schema::parse_yaml( $text, $FILE ) );
 }
 
-=func validate
+=func validate($data)
 
-C<($data)>.  C<$data> checked against C<%SCHEMA>, with the defaults filled in,
-for a caller that has the configuration without the file.
+C<$data> checked against C<%SCHEMA>, with the defaults filled in, for a caller
+that has the configuration without the file.
+
+=over 4
+
+=item data - HashRef - the configuration
+
+=back
+
+Returns HashRef, a copy of C<$data> with the defaults filled in.
+
+Dies when the data is not valid, with a message that starts with
+C<.conformance.yml is not valid:>.
+
+    my $config = Dist::Conformance::Config::validate( { flavor => 'troglodyne', source => { directory => '/bogus/standards' } } );
 
 =cut
 

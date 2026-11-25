@@ -86,17 +86,11 @@ sub config_schema ($) {
     };
 }
 
-=method hook_path
-
-C<($name)>.  The path of the hook C<$name> in the repository.
-
-=cut
-
+# The path of the hook C<$name> in the repository: below C<directory>.
+# @param   name  Str  the name of the hook, such as C<pre-commit>
+# @returns Str  the path, relative to the top of the repository
+# @example my $path = $check->hook_path('pre-commit');
 sub hook_path ( $self, $name ) { return $self->config->{directory} . "/$name" }
-
-=method check
-
-=cut
 
 sub check ( $self, $snapshot ) {
     my $hooks   = $self->config->{hooks};
@@ -107,13 +101,6 @@ sub check ( $self, $snapshot ) {
     return ( $self->config->{differ}, 'customized or outdated: ' . join ', ', map { local ($_) = $_; $self->hook_path($_) } @differ ) if @differ;
     return ( 'pass', 'match the templates' );
 }
-
-=method update
-
-Writes the missing hooks, replaces those that differ if C<replace>, and
-installs them if C<install>.
-
-=cut
 
 sub update ( $self, $update ) {
     my ( $hooks, $replace, $install ) = @{ $self->config }{qw{hooks replace install}};

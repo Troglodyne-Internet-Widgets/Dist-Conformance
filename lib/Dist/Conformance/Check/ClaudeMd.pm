@@ -61,10 +61,6 @@ sub config_schema ($) {
     };
 }
 
-=method check
-
-=cut
-
 sub check ( $self, $snapshot ) {
     my ( $file, $mentions ) = @{ $self->config }{qw{file mentions}};
     my $text   = $snapshot->content($file) // return ( 'fail', "$file is missing" );
@@ -72,12 +68,6 @@ sub check ( $self, $snapshot ) {
     return ( 'fail', "$file does not name " . join ', ', @absent ) if @absent;
     return ( 'pass', @$mentions ? 'names ' . join ', ',  @$mentions : "$file exists" );
 }
-
-=method update
-
-Records what the file needs, for a person.
-
-=cut
 
 sub update ( $self, $update ) {
     my ( $status, $detail ) = $self->check( $update->snapshot );

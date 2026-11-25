@@ -31,9 +31,21 @@ Required.  The top of the tree.
 
 has 'directory';
 
-=method new
+=method new(@args)
+
+A new source.
+
+=over 4
+
+=item args - Hash - the attributes, such as L</directory> and C<path>, as named arguments
+
+=back
+
+Returns a Dist::Conformance::Source::Directory object.
 
 Dies unless L</directory> is given.
+
+    my $source = Dist::Conformance::Source::Directory->new( directory => '/bogus/standards' );
 
 =cut
 
@@ -45,7 +57,13 @@ sub new ( $class, @args ) {
 
 =method root
 
-L</directory>, as a L<Mojo::File>.  Dies when it is not a directory.
+L</directory>, as a L<Mojo::File>.
+
+Returns a Mojo::File object.
+
+Dies when it is not a directory.
+
+    my $top = $source->root;
 
 =cut
 
@@ -58,6 +76,10 @@ sub root ($self) {
 =method describe
 
 The directory, and the path inside it.
+
+Returns Str.
+
+    say 'Flavor from ', $source->describe;
 
 =cut
 

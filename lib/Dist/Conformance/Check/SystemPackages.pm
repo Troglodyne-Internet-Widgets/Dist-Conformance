@@ -70,7 +70,7 @@ third-party archives that some of the packages come from:
 The declaration says what a host must install.  This check does not ask what
 a host has installed.  It reads a snapshot, which can be of a repository that
 is not on this machine, and does not run the tests.  Other code installs the
-packages: it reads them with L</declared> and L</resolve>, or with
+packages: it reads them with L<declared|/"declared($from)"> and L<resolve|/"resolve($declared, %host)">, or with
 C<conformance packages> (see L<conformance>).
 
 =head2 A dependency
@@ -374,20 +374,13 @@ my sub errors_of ($document) {
     return @errors;
 }
 
-=method config_schema
-
-=cut
-
 sub config_schema ($) { return { properties => { template => $Dist::Conformance::Schema::PATH } } }
 
-=method required
-
-The mapping of the template of C<template>, with its variables filled in, or
-nothing without C<template>.  Dies when the template has a placeholder that
-nothing fills, does not parse, or is not a valid declaration.
-
-=cut
-
+# The mapping of the template of C<template>, with its variables filled in.
+# @returns HashRef  the declaration of the template, or nothing without C<template>
+# @throws  when the template has a placeholder that nothing fills, does not parse,
+# or is not a valid declaration
+# @example my $required = $check->required;
 sub required ($self) {
     my $path = $self->config->{template} // return;
     my ( $text, @unfilled ) = $self->template($path);
@@ -406,9 +399,9 @@ my sub missing_from ( $document, $required ) {
     return @missing;
 }
 
-=method declared
+=method declared($from)
 
-C<($from)>, a class method.  The validated declaration of a repository, as it
+A class method.  The validated declaration of a repository, as it
 is written: a hash reference with C<packages>, the mapping of
 C<x_system_packages>, and C<sources>, the mapping of C<x_system_sources>, such
 as
@@ -419,16 +412,24 @@ as
     }
 
 A repository that declares nothing gives C<< { packages => {}, sources => {} } >>.
-L</resolve> gives what one host installs.
+L<resolve|/"resolve($declared, %host)"> gives what one host installs.
 
-C<$from> is a L<Dist::Conformance::Snapshot>, such as a
-L<Dist::Conformance::Snapshot::Tree> of a remote repository, or the directory
-of a checkout.  Only F<metamerge.yml> is read.
+=over 4
+
+=item from - InstanceOf["Dist::Conformance::Snapshot"]|Str - a L<Dist::Conformance::Snapshot>,
+such as a L<Dist::Conformance::Snapshot::Tree> of a remote repository, or the
+directory of a checkout.  Only F<metamerge.yml> is read.
+
+=back
+
+Returns HashRef, the declaration.
 
 Dies when F<metamerge.yml> does not parse, and when the declaration is not
 valid, as L</DESCRIPTION> says.  Then the message starts with
 C<metamerge.yml is not valid:>, and gives each error on a line of its own, as
-L<Dist::Conformance::Schema/validate> does.
+L<Dist::Conformance::Schema/"validate($data, $schema, $where)"> does.
+
+    my $declared = Dist::Conformance::Check::SystemPackages->declared('/bogus/checkout');
 
 =cut
 
@@ -440,10 +441,17 @@ sub declared ( $, $from ) {
     return declaration_of($document);
 }
 
-=method resolve
+=method resolve($declared, %host)
 
-C<($declared, %host)>, a class method.  What one host installs, from
-C<$declared> as L</declared> returns it.  C<%host> has:
+A class method.  What one host installs, from C<$declared>.
+
+=over 4
+
+=item declared - HashRef - the declaration, as L<declared|/"declared($from)"> returns it
+
+=item host - Hash - the host, as a list of named arguments:
+
+=back
 
 =over
 
@@ -462,7 +470,7 @@ The C<VERSION_CODENAME> of F</etc/os-release>, for C<{codename}> in a suite.
 
 =back
 
-Returns a hash reference:
+Returns HashRef:
 
     {
         needs      => [ { name => 'FooLib', package => 'libfoo-dev', source => undef, test => undef }, ... ],
@@ -506,6 +514,8 @@ without them, so the caller decides what to do, and C<resolve> does not die.
 
 Dies without a packager, and on a source that a package needs and that needs a
 codename that C<%host> does not give.
+
+    my $host = Dist::Conformance::Check::SystemPackages->resolve( $declared, packager => 'deb', distro => 'ubuntu', release => '24.04' );
 
 =cut
 
@@ -557,13 +567,22 @@ sub resolve ( $, $declared, %host ) {
     };
 }
 
-=func os_release
+=func os_release($text)
 
-C<($text)>.  The variables of the text of an F</etc/os-release>, as a hash
-reference from each name to its value, such as
+The variables of the text of an F</etc/os-release>.  A value can be bare, in
+single quotes, or in double quotes with C<\> escapes, as the shell reads it.
+Blank lines and comments are skipped.
+
+=over 4
+
+=item text - Str - the text of the file
+
+=back
+
+Returns HashRef, from each name to its value, such as
 C<< { ID => 'ubuntu', VERSION_ID => '24.04', VERSION_CODENAME => 'noble' } >>.
-A value can be bare, in single quotes, or in double quotes with C<\>
-escapes, as the shell reads it.  Blank lines and comments are skipped.
+
+    my $os_release = Dist::Conformance::Check::SystemPackages::os_release( Mojo::File->new('/etc/os-release')->slurp );
 
 =cut
 
@@ -577,10 +596,6 @@ sub os_release ($text) {
     }
     return \%variables;
 }
-
-=method check
-
-=cut
 
 sub check ( $self, $snapshot ) {
     if ( !$snapshot->contains($FILE) ) {
@@ -601,13 +616,6 @@ sub check ( $self, $snapshot ) {
     my $last = pop @said;
     return ( 'pass', "$FILE declares " . ( @said ? join( ', ', @said ) . " and $last" : $last ) );
 }
-
-=method update
-
-Without C<template>, changes nothing, and says what is wrong when the check
-fails.  With it, writes the file or adds to it, as L</CONFIGURATION> says.
-
-=cut
 
 sub update ( $self, $update ) {
     my $template = $self->config->{template} // return $self->SUPER::update($update);
