@@ -6,7 +6,7 @@ use 5.040;
 use warnings FATAL => 'all';
 use re '/aasx';
 no autovivification;
-use Mojo::Base 'Dist::Conformance::Check', -signatures;
+use Mojo::Base 'Dist::Conformance::Check::IniTemplate', -signatures;
 
 use Config::Tiny();
 
@@ -92,6 +92,10 @@ So when the standards add a policy, drop one, turn one off or change a
 parameter, every profile that does not follow fails, and the update brings it
 along.  A policy that the template drops leaves every profile, unless an
 override names it.
+
+L<Dist::Conformance::Check::IniTemplate> writes the text, and this check tells
+it how Perl::Critic reads a profile: a section is a policy, C<[-Name]> turns it
+off, and a comment starts with C<#> or C<;>.
 
 The update writes the text whenever the file differs from it, also in the
 comments.  It replaces whatever the file had, so run C<conformance adopt>
@@ -284,21 +288,32 @@ Returns the new lines, as a list.
 =cut
 
 sub rewrite ( $lines, $overlay ) {
-    my ( @out, %seen, $after );
-    for my $line (@$lines) {
+    return __PACKAGE__->rewrite_lines( $lines, $overlay );
+}
+
+# How Perl::Critic reads a line, a section and a profile, for
+# L<Dist::Conformance::Check::IniTemplate>.
+sub line_header    ( $, $line )    { return header_of($line) }
+sub line_parameter ( $, $line )    { return parameter_of($line) }
+sub section_of     ( $, $header )  { return policy_of($header) }
+sub on_header      ( $, $name, $ ) { return "[$name]\n" }
+sub comment ($)                { return q{#} }
+sub parse ( $, $text, $where ) { return profile_of( $text, $where ) }
+
+# A policy that an override turns off keeps its section, as C<[-Name]>, with
+# its parameters removed.
+sub off_lines ( $, $name, $body ) {
+    my %gone;
+    for my $line (@$body) {
         my ($key) = parameter_of($line);
-        my $kept = $line;
-        if ( defined $key && exists $overlay->{$key} ) {
-            $seen{$key} = 1;
-            next if !defined $overlay->{$key};
-            $kept = "$key = $overlay->{$key}\n";
-        }
-        push @out, $kept;
-        $after = scalar @out if defined $key;
+        $gone{$key} = undef if defined $key;
     }
-    my @new = map { "$_ = $overlay->{$_}\n" } grep { !$seen{$_} && defined $overlay->{$_} } sort keys %$overlay;
-    splice @out, $after // 0, 0, @new;
-    return @out;
+    return ( "[-$name]\n", rewrite( $body, \%gone ) );
+}
+
+sub compare ( $self, $text, $want ) {
+    my ( $file, $template ) = @{ $self->config }{qw{file template}};
+    return differences( profile_of( $text, $file ), profile_of( $want, $template ) );
 }
 
 # The entries of C<overrides>, by the short name of each policy.
@@ -316,61 +331,21 @@ sub overrides ($self) {
     return \%overrides;
 }
 
-# The text that the profile must be: the template, its placeholders filled in,
-# with the overrides and the settings applied, as L</DESCRIPTION> says.
-# @returns Str  the text of the profile
-# @throws  when a placeholder has no variable, and when the template does not parse
-# @example my $text = $check->expected;
-sub expected ($self) {
-    my $template = $self->config->{template};
-    my ( $text, @unfilled ) = $self->template($template);
-    die( "$template needs the variables " . join( ', ', @unfilled ) . " in .conformance.yml: nothing sets them\n" ) if @unfilled;
-    my $standard = profile_of( $text, $template )->{policies};
-    my $given    = $self->overrides;
+# The entries of C<overrides>, by the full name of each policy, as the
+# template C<$standard> names it.
+# @param   standard  HashRef  the template, as L<profile_of|/"profile_of($text, $where)"> returns it
+# @returns HashRef  from the name of each policy to C<off> or its parameters
+# @throws  on a name that is not that of a policy, and on two entries for one policy
+# @example my $overrides = $check->resolved_overrides($standard);
+sub resolved_overrides ( $self, $standard ) {
+    my $given = $self->overrides;
     my %overrides;
     for my $as ( sort keys %$given ) {
-        my $name = full_name( $as, $standard );
+        my $name = full_name( $as, $standard->{policies} );
         die "overrides names the policy $name twice\n" if exists $overrides{$name};
         $overrides{$name} = $given->{$as};
     }
-    my $overrides = \%overrides;
-
-    $text .= "\n" if $text =~ m/[^\n]\z/;
-    my @lines   = split /^/, $text;
-    my @headers = grep { defined header_of( $lines[$_] ) } 0 .. $#lines;
-    my @bodies  = ( [ 0, $headers[0] // scalar @lines ] );
-    push @bodies, map { [ $headers[$_] + 1, $headers[ $_ + 1 ] // scalar @lines ] } 0 .. $#headers;
-
-    my @out = rewrite( [ @lines[ $bodies[0][0] .. $bodies[0][1] - 1 ] ], $self->config->{settings} );
-    my %named;
-    for my $i ( 0 .. $#headers ) {
-        my $name = ( policy_of( header_of( $lines[ $headers[$i] ] ) ) )[1];
-        my @body = @lines[ $bodies[ $i + 1 ][0] .. $bodies[ $i + 1 ][1] - 1 ];
-        my $want = $overrides->{$name};
-        $named{$name} = 1;
-        if ( !defined $want ) {
-            push @out, $lines[ $headers[$i] ], @body;
-        }
-        elsif ( $want eq 'off' ) {
-            my %gone;
-            for my $line (@body) {
-                my ($key) = parameter_of($line);
-                $gone{$key} = undef if defined $key;
-            }
-            push @out, "[-$name]\n", rewrite( \@body, \%gone );
-        }
-        else {
-            push @out, "[$name]\n", rewrite( \@body, $want );
-        }
-    }
-
-    my @own = grep { !$named{$_} } sort keys %$overrides;
-    push @out, "\n# The overrides of .conformance.yml\n" if @own;
-    for my $name (@own) {
-        my $want = $overrides->{$name};
-        push @out, ref $want ? ( "[$name]\n", rewrite( [], $want ) ) : "[-$name]\n";
-    }
-    return join q{}, @out;
+    return \%overrides;
 }
 
 =func differences($have, $want)
@@ -416,27 +391,9 @@ sub differences ( $have, $want ) {
     return @differences;
 }
 
-sub check ( $self, $snapshot ) {
-    my ( $file, $template ) = @{ $self->config }{qw{file template}};
-    my $text = $snapshot->content($file) // return ( 'fail', "$file is missing" );
-    my $want = $self->expected;
-    return ( 'pass', "is $template with the overrides" ) if $text eq $want;
-    my $have        = eval { profile_of( $text, $file ) } // return ( 'fail', Dist::Conformance::Schema::first_line($@) . ', and conformance update replaces it' );
-    my @differences = differences( $have, profile_of( $want, $template ) );
-    return ( 'info', "differs from $template with the overrides only in comments and layout, which conformance update rewrites" ) if !@differences;
-    return ( 'fail', join( '; ', @differences ) . ', which conformance update corrects' );
-}
-
-sub update ( $self, $update ) {
-    my $want = eval { $self->expected };
-    return $update->by_hand( Dist::Conformance::Schema::first_line($@) . ': ' . $self->name . ' cannot write ' . $self->config->{file} ) if !defined $want;
-    $update->write( $self->config->{file}, $want );
-    return;
-}
-
 =method adopt($snapshot)
 
-The C<overrides> and C<settings> that make L</expected> read as the profile in
+The C<overrides> and C<settings> that make L<expected|Dist::Conformance::Check::IniTemplate/"expected($snapshot)"> read as the profile in
 C<$snapshot> reads now.  A policy that the template names and the profile
 lacks is not adopted: the profile lacked it because the template gained it
 later.  A policy that the profile names by the last parts of a name that the
