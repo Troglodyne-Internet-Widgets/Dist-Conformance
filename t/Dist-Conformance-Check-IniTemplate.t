@@ -37,9 +37,10 @@ sub ini_of   ($root)            { return $root->child('dist.ini')->slurp }
 
 subtest config => sub {
     ok( lives { ini( overrides => { A => 'off', B => { k => 'v', l => [ 1, 'x' ], m => undef } }, positions => { B => 'A' }, settings => { s => [ 'a', 'b' ] } ) }, 'off, a mapping of values, lists and ~, positions and settings' );
-    like( dies { ini( overrides => { A => 'on' } ) },                qr{/overrides/A},   'an override is off or a mapping' );
-    like( dies { ini( overrides => { A => { k => [] } } ) },         qr{/overrides/A/k}, 'a list has an item' );
-    like( dies { ini( positions => { A => q{} } ) },                 qr{/positions/A},   'a position names a section' );
+    like( dies { ini( overrides => { A => 'on' } ) },        qr{/overrides/A},   'an override is off or a mapping' );
+    like( dies { ini( overrides => { A => { k => [] } } ) }, qr{/overrides/A/k}, 'a list has an item' );
+    like( dies { ini( positions => { A => q{} } ) },         qr{/positions/A},   'a position names a section' );
+    ok( lives { ini( positions => { A => undef } ) }, 'or is ~' );
     like( dies { ini( overrides => { A => { k => { x => 1 } } } ) }, qr{/overrides/A/k}, 'a value is not a mapping' );
 };
 
@@ -54,12 +55,13 @@ subtest parse => sub {
 
 subtest rewrite_lines => sub {
     my @lines = ( "; why\n", "a = 1\n", "b = 1\n", "b = 2\n", "c = 1\n" );
-    is( [ ini()->rewrite_lines( \@lines, { a => 2 } ) ],                 [ "; why\n", "a = 2\n", "b = 1\n", "b = 2\n", "c = 1\n" ],            'a value replaces the line of its key' );
-    is( [ ini()->rewrite_lines( \@lines, { b => [ 3, 4, 5 ] } ) ],       [ "; why\n", "a = 1\n", "b = 3\n", "b = 4\n", "b = 5\n", "c = 1\n" ], 'a list replaces every line of its key, where the first one was' );
-    is( [ ini()->rewrite_lines( \@lines, { b => 3 } ) ],                 [ "; why\n", "a = 1\n", "b = 3\n", "c = 1\n" ],                       'and so does a value' );
-    is( [ ini()->rewrite_lines( \@lines, { b => undef, c => undef } ) ], [ "; why\n", "a = 1\n" ],                                             'undef removes the lines of its key' );
-    is( [ ini()->rewrite_lines( \@lines, { e => 1, d => [ 1, 2 ] } ) ],  [ @lines, "d = 1\n", "d = 2\n", "e = 1\n" ],                          'a new key goes after the last key, sorted' );
-    is( [ ini()->rewrite_lines( ["; only\n"], { a => 1 } ) ],            [ "a = 1\n", "; only\n" ],                                            'or first, in lines with no key' );
+    is( [ ini()->rewrite_lines( \@lines, { a => 2 } ) ],                                  [ "; why\n", "a = 2\n", "b = 1\n", "b = 2\n", "c = 1\n" ],            'a value replaces the line of its key' );
+    is( [ ini()->rewrite_lines( \@lines, { b => [ 3, 4, 5 ] } ) ],                        [ "; why\n", "a = 1\n", "b = 3\n", "b = 4\n", "b = 5\n", "c = 1\n" ], 'a list replaces every line of its key, where the first one was' );
+    is( [ ini()->rewrite_lines( \@lines, { b => 3 } ) ],                                  [ "; why\n", "a = 1\n", "b = 3\n", "c = 1\n" ],                       'and so does a value' );
+    is( [ ini()->rewrite_lines( \@lines, { b => undef, c => undef } ) ],                  [ "; why\n", "a = 1\n" ],                                             'undef removes the lines of its key' );
+    is( [ ini()->rewrite_lines( \@lines, { e => 1, d => [ 1, 2 ] } ) ],                   [ @lines, "d = 1\n", "d = 2\n", "e = 1\n" ],                          'a new key goes after the last key, sorted' );
+    is( [ ini()->rewrite_lines( ["; only\n"], { a => 1 } ) ],                             [ "a = 1\n", "; only\n" ],                                            'or first, in lines with no key' );
+    is( [ ini()->rewrite_lines( [ "    a = 1\n", "    b = 1\n" ], { b => 2, c => 3 } ) ], [ "    a = 1\n", "    b = 2\n", "    c = 3\n" ],                      'with the indentation of the line it replaces, or of the last key' );
 };
 
 subtest expected => sub {
@@ -102,6 +104,26 @@ allow_dirty = Changes
 
 ; The overrides of .conformance.yml
 [Last]
+END
+    is( ini( overrides => { First => { k => 'v' }, Second => {} }, positions => { First => undef, Second => 'First' } )->expected, <<'END', '~ puts a section before every section, after the keys before them' );
+; The build.
+name = Foo-Bar
+license = MIT
+
+[First]
+k = v
+
+[Second]
+
+[GatherDir]
+exclude_filename = LICENSE
+exclude_filename = README.md
+
+; Commits the release.
+[Git::Commit / Release_Commit]
+allow_dirty = Changes
+
+[MetaJSON]
 END
     like( dies { ini( positions => { GatherDir => 'MetaJSON' } )->expected },                            qr/places\ the\ section\ GatherDir,\ which\ the\ template\ has/, 'positions does not move a section of the template' );
     like( dies { ini( positions => { Own       => 'MetaJSON' } )->expected },                            qr/Own,\ which\ the\ overrides\ do\ not/,                        'nor places one that the overrides lack' );
@@ -155,6 +177,10 @@ subtest adopt => sub {
         'the keys that differ, the sections of its own and where they are, and the settings; not the section of the template that it lacks'
     );
     is( check_of( $root, %$adopted ), [ 'fail', 'lacks the section [MetaJSON], which conformance update corrects' ], 'with them, only what the template gained later is left' );
+
+    my $first = Fixture::checkout( 'dist.ini' => $TEMPLATE =~ s/^(?=\[GatherDir\])/[Bootstrap]\n/mr );
+    is( ini()->adopt( snapshot($first) ),                          { overrides => { Bootstrap => {} }, positions => { Bootstrap => undef } }, 'a section of its own before every section has the position ~' );
+    is( check_of( $first, %{ ini()->adopt( snapshot($first) ) } ), [ 'info', match(qr/only\ in\ comments\ and\ layout/) ],                    'which keeps it first' );
 };
 
 done_testing;
