@@ -72,7 +72,9 @@ The overrides change the text of the template in place.  A key that an
 override changes stays on its line, a new key goes after the last key of its
 section, and a section that the template does not have goes after the section
 that C<positions> names for it, or at the end of the file.  It goes after the
-last key of that section, and before the comments that introduce the next one.  The order of the
+last key of that section, and before the comments that introduce the next one.
+A position of C<~> puts it before the first section, after the last key before
+that section.  The order of the
 sections is part of what the file says, because Dist::Zilla runs its plugins
 in that order.
 
@@ -119,7 +121,9 @@ L</DESCRIPTION> says.  Default none.
 
 For each section of C<overrides> that the template does not have, the section
 that it goes after.  That section is one of the template, or another one of
-C<overrides>.  Default none, which puts such a section at the end of the file.
+C<overrides>.  C<~> puts it before every section, which a plugin that changes
+how Dist::Zilla loads the others needs, such as C<[Bootstrap::lib]>.  Default
+none, which puts such a section at the end of the file.
 
 =item settings
 
@@ -144,8 +148,8 @@ sub config_schema ($) {
                 additionalProperties => { anyOf => [ { type => 'string', enum => ['off'] }, { type => 'object', additionalProperties => $VALUE } ] },
                 default              => {},
             },
-            positions => { type => 'object', additionalProperties => { type => 'string', minLength => 1 }, default => {} },
-            settings  => { type => 'object', additionalProperties => $VALUE,                               default => {} },
+            positions => { type => 'object', additionalProperties => { type => 'string', minLength => 1, nullable => 1 }, default => {} },
+            settings  => { type => 'object', additionalProperties => $VALUE,                                              default => {} },
         },
     };
 }
@@ -439,24 +443,19 @@ sub expected ( $self, @ ) {
         my $anchor = $positions->{$name};
         die "positions places the section $name, which the template has, and which stays where the template puts it\n" if $named{$name};
         die "positions places the section $name, which the overrides do not name\n"                                    if !$own{$name};
-        die "positions puts the section $name after $anchor, which neither the template nor the overrides name\n"      if !$named{$anchor} && !$own{$anchor};
-        push @{ $after{$anchor} }, $name;
+        die "positions puts the section $name after $anchor, which neither the template nor the overrides name\n"      if defined $anchor && !$named{$anchor} && !$own{$anchor};
+        push @{ $after{ $anchor // q{} } }, $name;
     }
     push @last, grep { !exists $positions->{$_} } sort keys %own;
 
-    my @out = $self->rewrite_lines( [ @lines[ $bodies[0][0] .. $bodies[0][1] - 1 ] ], $self->config->{settings} );
+    my ( $settings, $introduction ) = $self->split_tail( [ @lines[ $bodies[0][0] .. $bodies[0][1] - 1 ] ] );
+    my @out = ( $self->rewrite_lines( $settings, $self->config->{settings} ), placed_after( \%own, \%after, q{} ), @$introduction );
     for my $i ( 0 .. $#headers ) {
         my $name = $names[$i];
-        my @body = @lines[ $bodies[ $i + 1 ][0] .. $bodies[ $i + 1 ][1] - 1 ];
+        my ( $keys, $tail ) = $self->split_tail( [ @lines[ $bodies[ $i + 1 ][0] .. $bodies[ $i + 1 ][1] - 1 ] ] );
+        my @body = @$keys;
+        my @tail = @$tail;
         my $want = $overrides->{$name};
-
-        # The blank lines and comments after the last key introduce what comes
-        # next, so they stay when the section goes, and a section placed after
-        # this one goes above them.
-        my $end = scalar @body;
-        $end-- while $end > 0 && !defined $self->line_parameter( $body[ $end - 1 ] );
-        my @tail = @body[ $end .. $#body ];
-        @body = @body[ 0 .. $end - 1 ];
 
         my @section;
         if ( !defined $want ) {
@@ -478,11 +477,23 @@ sub expected ( $self, @ ) {
     return join q{}, @out;
 }
 
+# The lines of a section's body up to its last key, and the blank lines and
+# comments after it, which introduce what comes next.  They stay when the
+# section goes, and a section placed after this one goes above them.
+# @param   lines  ArrayRef[Str]  the lines of the body
+# @returns ArrayRef[Str] the lines up to the last key, then ArrayRef[Str] the rest
+# @example my ( $keys, $tail ) = $check->split_tail( [ "a = 1\n", "\n", "; next\n" ] );
+sub split_tail ( $self, $lines ) {
+    my $end = scalar @$lines;
+    $end-- while $end > 0 && !defined $self->line_parameter( $lines->[ $end - 1 ] );
+    return ( [ @{$lines}[ 0 .. $end - 1 ] ], [ @{$lines}[ $end .. $#$lines ] ] );
+}
+
 # The lines of the sections that C<%after> puts after the section C<$anchor>,
 # each after a blank line, and after each of them the sections that go after it.
 # @param   own     HashRef  from the name of each section that only the overrides have to its lines
 # @param   after   HashRef  from the name of a section to the names of those that go after it
-# @param   anchor  Str      the name of the section
+# @param   anchor  Str      the name of the section, or the empty string for the top of the file
 # @returns the lines, as a list
 # @example my @lines = placed_after( \%own, \%after, 'Git::Commit' );
 sub placed_after ( $own, $after, $anchor ) {
@@ -574,6 +585,7 @@ The C<overrides>, C<positions> and C<settings> that make L<expected|/"expected($
 the file in C<$snapshot> reads now.  A section that the template has and the
 file lacks is not adopted: the file lacked it because the template gained it
 later.  A key that the template has and the file lacks is adopted as C<~>.
+A section of its own that comes before every section has the position C<~>.
 
 =over 4
 
@@ -604,7 +616,7 @@ sub adopt ( $self, $snapshot ) {
         my $mine = $have->{sections}{$name}{parameters};
         if ( !exists $want->{sections}{$name} ) {
             $overrides{$name} = {%$mine};
-            $positions{$name} = $previous if defined $previous;
+            $positions{$name} = $previous;
         }
         else {
             my $changed = overlay( $want->{sections}{$name}{parameters}, $mine );
