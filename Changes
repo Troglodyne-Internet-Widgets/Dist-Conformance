@@ -1,5 +1,8 @@
 Revision history for Dist-Conformance
 
+0.011 2026-11-26 TEODESIAN
+    - A position of ~ puts a section of the overrides before every section, and conformance adopt keeps a section of its own that comes first there
+
 0.010 2026-11-25 TEODESIAN
     - Add IniTemplate, which holds an INI file to its template with the overrides of the repository, and DistIni, which does so for dist.ini, authordeps included
 
