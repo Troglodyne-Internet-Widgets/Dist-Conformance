@@ -11,3 +11,12 @@ variables:
   GITHUB_USER: Troglodyne-Internet-Widgets
   CPAN_ID: TEODESIAN
   DATE: '2026-11-02'
+checks:
+  DistIni:
+    overrides:
+      # The command is script/conformance.
+      ExecDir:
+        dir: script
+      # A helper of the schema, in its file, which nobody loads by that name.
+      MetaNoIndex:
+        package: Dist::Conformance::Schema::INIReader
