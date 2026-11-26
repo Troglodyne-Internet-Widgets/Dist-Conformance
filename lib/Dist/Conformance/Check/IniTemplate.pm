@@ -308,7 +308,8 @@ C<%overlay> over theirs.  A key that it sets to a value has that value on its
 first line, and a key that it sets to a list has a line for each item there.
 Its other lines go.  A key that it sets to C<undef> loses its lines.  A key
 that the lines lack gets lines after their last key, or first when they have
-none.  The other lines stay as they were.
+none.  A line that it writes has the indentation of the line that it replaces,
+or of the last key before it.  The other lines stay as they were.
 
 =over 4
 
@@ -326,22 +327,24 @@ Returns the new lines, as a list.
 
 sub rewrite_lines ( $self, $lines, $overlay ) {
     my ( @out, %done, $after );
+    my $indent = q{};
     for my $line (@$lines) {
-        my ($key) = $self->line_parameter($line);
+        my ($key)  = $self->line_parameter($line);
+        my ($lead) = $line =~ m/\A(\h*)/;
         if ( defined $key && exists $overlay->{$key} ) {
             next if $done{$key}++;
             my @values = values_of( $overlay->{$key} );
             next if !@values;
-            push @out, map { "$key = $_\n" } @values;
-            $after = scalar @out;
+            push @out, map { "$lead$key = $_\n" } @values;
+            ( $after, $indent ) = ( scalar @out, $lead );
             next;
         }
         push @out, $line;
-        $after = scalar @out if defined $key;
+        ( $after, $indent ) = ( scalar @out, $lead ) if defined $key;
     }
     my @new;
     for my $key ( grep { !$done{$_} } sort keys %$overlay ) {
-        push @new, map { "$key = $_\n" } values_of( $overlay->{$key} );
+        push @new, map { "$indent$key = $_\n" } values_of( $overlay->{$key} );
     }
     splice @out, $after // 0, 0, @new;
     return @out;
